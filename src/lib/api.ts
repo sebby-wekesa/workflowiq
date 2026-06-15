@@ -270,6 +270,7 @@ function jobMutation<T>(fn: (a: T) => PromiseLike<unknown>) {
       onSuccess: () => {
         qc.invalidateQueries({ queryKey: ["jobs"] });
         qc.invalidateQueries({ queryKey: ["stock"] }); // stock side-effects
+        qc.invalidateQueries({ queryKey: ["customers"] }); // create_job can create a customer
       },
     });
   };
