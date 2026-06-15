@@ -1,5 +1,5 @@
 // src/components/providers/auth.tsx
-// Replaces the old Hercules OIDC + Convex auth provider.
+
 // Exposes the same surface your components already use via useAuth():
 //   { user, appUser, isLoading, isAuthenticated, signInWithEmail, signOut }
 import {

@@ -1,5 +1,6 @@
 -- =============================================================================
--- HERCULES WORKSHOP -> SUPABASE  |  01_schema.sql
+-- SUPABASE  |  01_schema.sql
+-- Run this FIRST in the Supabase SQL Editor, then run 02_data.sql.
 -- Run this FIRST in the Supabase SQL Editor, then run 02_data.sql.
 -- Translates the Convex schema + mutation logic into Postgres:
 --   * enums for every Convex union type
