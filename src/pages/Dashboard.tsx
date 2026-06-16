@@ -2,13 +2,13 @@ import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import Brand from "@/components/Brand";
 import { useAuth } from "@/components/providers/auth";
 import {
-  useCreateCustomer, useCreateJob, useCreateStock, useCustomers, useJobs, useStock,
+  useCreateCustomer, useCreateJob, useCreateStock, useCustomers, useJobs, useStock, useStockMovements,
 } from "@/lib/api";
 import type {
   Customer, JobCondition, JobPriority, JobStatus, StockCategory,
 } from "@/lib/supabase";
 
-type View = "overview" | "jobs" | "stock" | "customers";
+type View = "overview" | "jobs" | "stock" | "customers" | "movements";
 type CreateModal = "job" | "stock" | "customer" | null;
 
 const statusLabels: Record<JobStatus, string> = {
@@ -53,9 +53,11 @@ export default function Dashboard() {
   const { appUser, organization, signOut } = useAuth();
   const [view, setView] = useState<View>("overview");
   const [createModal, setCreateModal] = useState<CreateModal>(null);
+  const [selectedStockId, setSelectedStockId] = useState<string | null>(null);
   const jobs = useJobs();
   const stock = useStock();
   const customers = useCustomers();
+  const movements = useStockMovements(selectedStockId ?? undefined);
 
   const metrics = useMemo(() => {
     const jobRows = jobs.data ?? [];
@@ -76,7 +78,7 @@ export default function Dashboard() {
       <aside className="sidebar">
         <Brand compact />
         <nav>
-          {(["overview", "jobs", "stock", "customers"] as View[]).map((item) => (
+          {(["overview", "jobs", "stock", "customers", "movements"] as View[]).map((item) => (
             <button
               key={item}
               className={view === item ? "active" : ""}
@@ -194,23 +196,57 @@ export default function Dashboard() {
           </section>
         )}
 
-        {!isLoading && !error && view === "stock" && (
-          <DataTable
-            title={`${stock.data?.length ?? 0} inventory items`}
-            columns={["Item", "Category", "Available", "Minimum", "Supplier"]}
-            action={<button className="add-button" onClick={() => setCreateModal("stock")}>+ Add stock</button>}
-          >
-            {(stock.data ?? []).map((item) => (
-              <tr key={item.id}>
-                <td><strong>{item.name}</strong></td>
-                <td>{item.category.replaceAll("_", " ")}</td>
-                <td className={item.current_qty <= item.min_threshold ? "danger-text" : ""}>{item.current_qty} {item.unit}</td>
-                <td>{item.min_threshold} {item.unit}</td>
-                <td>{item.supplier ?? "—"}</td>
-              </tr>
-            ))}
-          </DataTable>
-        )}
+         {!isLoading && !error && view === "stock" && (
+            <DataTable
+              title={`${stock.data?.length ?? 0} inventory items`}
+              columns={["Item", "Category", "Available", "Minimum", "Supplier"]}
+              action={<button className="add-button" onClick={() => setCreateModal("stock")}>+ Add stock</button>}
+            >
+              {(stock.data ?? []).map((item) => (
+                <tr key={item.id}>
+                  <td><strong>{item.name}</strong></td>
+                  <td>{item.category.replaceAll("_", " ")}</td>
+                  <td className={item.current_qty <= item.min_threshold ? "danger-text" : ""}>{item.current_qty} {item.unit}</td>
+                  <td>{item.min_threshold} {item.unit}</td>
+                  <td>{item.supplier ?? "—"}</td>
+                </tr>
+              ))}
+            </DataTable>
+          )}
+
+          {!isLoading && !error && view === "movements" && selectedStockId && (
+            <DataTable
+              title={`${stock.data?.find(s => s.id === selectedStockId)?.name ?? "Unknown" } movements`}
+              columns={["Date", "Type", "Quantity", "Reason", "By"])
+              action={
+                <>
+                  <button className="add-button" onClick={() => setCreateModal("stock")}>+ New movement</button>
+                  <button className="add-button" onClick={() => setSelectedStockId(null)} style={{marginLeft: "8px"}}>
+                    All stocks
+                  </button>
+                </>
+              }
+            >
+              {(stockMovements ?? []).map((movement) => (
+                <tr key={movement.id}>
+                  <td>{movement.created_at}</td>
+                  <td>{movement.type}</td>
+                  <td>{movement.quantity}</td>
+                  <td>{movement.reason}</td>
+                  <td>{movement.performed_by_name ?? "System"}</td>
+                </tr>
+              ))}
+            </DataTable>
+          )}
+
+          {createModal === "job" && <AddJobModal customers={customers.data ?? []} onClose={() => setCreateModal(null)} />}
+          {createModal === "stock" && <AddStockModal onClose={() => setCreateModal(null)} />}
+          {createModal === "customer" && <AddCustomerModal onClose={() => setCreateModal(null)} />}
+          {selectedStockId && createModal !== "stock" && (
+            <button className="add-button" onClick={() => setSelectedStockId(null)} style={{marginTop: "16px"}}>
+              Back to stock list
+            </button>
+          )}
 
         {!isLoading && !error && view === "customers" && (
           <DataTable

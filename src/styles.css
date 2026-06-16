@@ -208,3 +208,4 @@ td small { display: block; max-width: 270px; overflow: hidden; margin-top: 3px; 
   .form-grid { grid-template-columns: 1fr; }
   .form-actions .button { flex: 1; min-width: 0; }
 }
+.nav-movements { border-radius: 50%; }
