@@ -16,12 +16,15 @@ interface AuthContextValue {
   isLoading: boolean;
   isAuthenticated: boolean;
   // Magic-link sign in for an existing/invited account
-  signInWithEmail: (email: string) => Promise<{ error: string | null }>;
-  // Self-serve sign up that creates a brand-new workshop (org)
+    signInWithEmail: (email: string) => Promise<{ error: string | null }>;
+    // Password-based sign in fallback
+    signInWithPassword: (email: string, password: string) => Promise<{ error: string | null }>;
+    // Self-serve sign up that creates a brand-new workshop (org)
   signUpNewWorkshop: (
     email: string,
     fullName: string,
     workshopName: string,
+    password: string,
   ) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -99,15 +102,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       return { error: error?.message ?? null };
     },
-    signUpNewWorkshop: async (email, fullName, workshopName) => {
-      // workshop_name + full_name ride along in user metadata; the DB trigger
-      // reads them to create the new organization and the admin account.
-      const { error } = await supabase.auth.signInWithOtp({
+    signUpNewWorkshop: async (email, fullName, workshopName, password) => {
+      const { error } = await supabase.auth.signUp({
         email: email.trim(),
+        password: password.trim(),
         options: {
-          shouldCreateUser: true,
           data: { full_name: fullName, workshop_name: workshopName },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       return { error: error?.message ?? null };
@@ -116,6 +116,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: { redirectTo: `${window.location.origin}/auth/callback` },
+      });
+      return { error: error?.message ?? null };
+    },
+    signInWithPassword: async (email, password) => {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password: password.trim(),
       });
       return { error: error?.message ?? null };
     },

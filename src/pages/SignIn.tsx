@@ -7,11 +7,12 @@ type Mode = "sign-in" | "new-workshop";
 type Notice = { type: "success" | "error"; text: string } | null;
 
 export default function SignIn() {
-  const { signInWithEmail, signInWithGoogle, signUpNewWorkshop } = useAuth();
+  const { signInWithPassword, signInWithGoogle, signUpNewWorkshop } = useAuth();
   const googleAuthEnabled = import.meta.env.VITE_ENABLE_GOOGLE_AUTH === "true";
   const [searchParams] = useSearchParams();
   const [mode, setMode] = useState<Mode>("sign-in");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [workshopName, setWorkshopName] = useState("");
   const [notice, setNotice] = useState<Notice>(() => {
@@ -26,21 +27,20 @@ export default function SignIn() {
     setNotice(null);
 
     try {
-      const result = mode === "sign-in"
-        ? await signInWithEmail(email)
-        : await signUpNewWorkshop(email, fullName, workshopName);
-
-      setNotice(result.error
-        ? { type: "error", text: result.error }
-        : {
-            type: "success",
-            text: "Check your inbox for a secure sign-in link. It may take a minute to arrive.",
-          });
+      let result;
+      if (mode === "sign-in") {
+        result = await signInWithPassword(email, password);
+      } else {
+        result = await signUpNewWorkshop(email, fullName, workshopName, password);
+      }
+      
+      if (result.error) {
+        setNotice({ type: "error", text: result.error });
+      } else {
+        setNotice({ type: "success", text: mode === "sign-in" ? "Signed in successfully." : "Check your email to confirm your account." });
+      }
     } catch (error) {
-      setNotice({
-        type: "error",
-        text: error instanceof Error ? error.message : "Could not start sign-in.",
-      });
+      setNotice({ type: "error", text: error instanceof Error ? error.message : "Could not start sign-in." });
     } finally {
       setLoading(false);
     }
@@ -80,7 +80,7 @@ export default function SignIn() {
             <h2>{mode === "sign-in" ? "Welcome back" : "Create your workshop"}</h2>
             <p>
               {mode === "sign-in"
-                ? "Enter your email and we will send you a sign-in link."
+                ? "Enter your email and password to sign in."
                 : "Create a new, isolated workspace for your team."}
             </p>
           </div>
@@ -105,11 +105,21 @@ export default function SignIn() {
                   placeholder="Precision Works"
                 />
               </label>
+              <label>
+                Password
+                <input
+                  required
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="••••••••"
+                />
+              </label>
             </>
           )}
 
           <label>
-            Work email
+            Email
             <input
               required
               type="email"
@@ -119,8 +129,21 @@ export default function SignIn() {
             />
           </label>
 
+          {mode === "sign-in" && (
+            <label>
+              Password
+              <input
+                required
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder="••••••••"
+              />
+            </label>
+          )}
+
           <button className="button button-primary" disabled={loading}>
-            {loading ? "Sending..." : "Continue with email"}
+            {loading ? "Sending..." : mode === "sign-in" ? "Sign in" : "Create workshop"}
           </button>
           {googleAuthEnabled && (
             <button
