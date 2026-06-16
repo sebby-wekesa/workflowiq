@@ -217,7 +217,7 @@ export default function Dashboard() {
           {!isLoading && !error && view === "movements" && selectedStockId && (
             <DataTable
               title={`${stock.data?.find(s => s.id === selectedStockId)?.name ?? "Unknown" } movements`}
-              columns={["Date", "Type", "Quantity", "Reason", "By"])
+              columns={["Date", "Type", "Quantity", "Reason", "By"]}
               action={
                 <>
                   <button className="add-button" onClick={() => setCreateModal("stock")}>+ New movement</button>
@@ -227,13 +227,13 @@ export default function Dashboard() {
                 </>
               }
             >
-              {(stockMovements ?? []).map((movement) => (
+              {(movements.data ?? []).map((movement) => (
                 <tr key={movement.id}>
                   <td>{movement.created_at}</td>
                   <td>{movement.type}</td>
                   <td>{movement.quantity}</td>
                   <td>{movement.reason}</td>
-                  <td>{movement.performed_by_name ?? "System"}</td>
+                  <td>{movement.performedByName ?? "System"}</td>
                 </tr>
               ))}
             </DataTable>
