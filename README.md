@@ -43,3 +43,21 @@ Supabase and setting `VITE_ENABLE_GOOGLE_AUTH=true`.
 
 See [docs/MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) for the supplied backend
 migration details.
+
+## Deploy to Vercel
+
+Use the default Vite settings:
+
+```text
+Build command: pnpm run build
+Output directory: dist
+```
+
+Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` in Vercel's environment
+variables. The included `vercel.json` rewrites client routes such as
+`/sign-in` and `/auth/callback` to `index.html`, which prevents Vercel's
+`404: NOT_FOUND` page when a route is opened directly or after an auth redirect.
+
+In Supabase **Authentication > URL Configuration**, set the production Site URL
+to your Vercel domain and add `https://YOUR-DOMAIN/auth/callback` to the allowed
+redirect URLs.
