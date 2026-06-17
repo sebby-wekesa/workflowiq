@@ -1,4 +1,4 @@
-// src/components/providers/auth.tsx
+// src/components/providers/auth
 
 // Exposes the same surface your components already use via useAuth():
 //   { user, appUser, isLoading, isAuthenticated, signInWithEmail, signOut }
@@ -24,7 +24,7 @@ interface AuthContextValue {
     email: string,
     fullName: string,
     workshopName: string,
-    password: string,
+    password?: string,
   ) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -103,11 +103,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return { error: error?.message ?? null };
     },
     signUpNewWorkshop: async (email, fullName, workshopName, password) => {
-      const { error } = await supabase.auth.signUp({
+      if (password?.trim()) {
+        const { error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password: password.trim(),
+          options: {
+            data: { full_name: fullName, workshop_name: workshopName },
+          },
+        });
+        return { error: error?.message ?? null };
+      }
+
+      const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        password: password.trim(),
         options: {
+          shouldCreateUser: true,
           data: { full_name: fullName, workshop_name: workshopName },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
       return { error: error?.message ?? null };

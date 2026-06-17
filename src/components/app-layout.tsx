@@ -3,12 +3,12 @@ import {
   SidebarProvider,
   SidebarInset,
   SidebarTrigger,
-} from "@/components/ui/sidebar.tsx";
-import AppSidebar from "@/components/app-sidebar.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
+} from "@/components/ui/sidebar";
+import AppSidebar from "@/components/app-sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DiscIcon, ShieldXIcon } from "lucide-react";
-import { useAuth } from "@/components/providers/auth.tsx";
-import { Button } from "@/components/ui/button.tsx";
+import { useAuth } from "@/components/providers/auth";
+import { Button } from "@/components/ui/button";
 
 function LoadingScreen() {
   return (

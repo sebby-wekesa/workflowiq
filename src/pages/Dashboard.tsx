@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
-import Brand from "@/components/Brand";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "@/components/providers/auth";
 import {
   useCreateCustomer, useCreateJob, useCreateStock, useCustomers, useJobs, useStock, useStockMovements,
@@ -10,6 +10,16 @@ import type {
 
 type View = "overview" | "jobs" | "stock" | "customers" | "movements";
 type CreateModal = "job" | "stock" | "customer" | null;
+
+const routeToView: Record<string, View> = {
+  "/dashboard": "overview",
+  "/jobs": "jobs",
+  "/customers": "customers",
+  "/stock": "stock",
+  "/deliveries": "overview",
+  "/staff": "overview",
+  "/reports": "overview",
+};
 
 const statusLabels: Record<JobStatus, string> = {
   received: "Received",
@@ -50,8 +60,9 @@ function initials(name?: string | null) {
 }
 
 export default function Dashboard() {
-  const { appUser, organization, signOut } = useAuth();
-  const [view, setView] = useState<View>("overview");
+  const { pathname } = useLocation();
+  const { appUser, organization } = useAuth();
+  const view = routeToView[pathname] ?? "overview";
   const [createModal, setCreateModal] = useState<CreateModal>(null);
   const [selectedStockId, setSelectedStockId] = useState<string | null>(null);
   const jobs = useJobs();
@@ -74,32 +85,9 @@ export default function Dashboard() {
   const error = jobs.error || stock.error || customers.error;
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
-        <Brand compact />
-        <nav>
-          {(["overview", "jobs", "stock", "customers", "movements"] as View[]).map((item) => (
-            <button
-              key={item}
-              className={view === item ? "active" : ""}
-              onClick={() => setView(item)}
-            >
-              <span className={`nav-icon nav-${item}`} />
-              {item[0].toUpperCase() + item.slice(1)}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-footer">
-          <div className="workspace">
-            <span className="avatar">{initials(organization?.name)}</span>
-            <div><strong>{organization?.name ?? "Workshop"}</strong><small>{appUser?.role}</small></div>
-          </div>
-          <button className="sign-out" onClick={signOut}>Sign out</button>
-        </div>
-      </aside>
-
-      <main className="dashboard">
-        <header className="dashboard-header">
+    <>
+    <div className="dashboard">
+      <header className="dashboard-header">
           <div>
             <p className="eyebrow">{organization?.name ?? "Your workshop"}</p>
             <h1>{view === "overview" ? "Good morning" : view[0].toUpperCase() + view.slice(1)}</h1>
@@ -264,12 +252,12 @@ export default function Dashboard() {
             ))}
           </DataTable>
         )}
-      </main>
+    </div>
 
       {createModal === "job" && <AddJobModal customers={customers.data ?? []} onClose={() => setCreateModal(null)} />}
       {createModal === "stock" && <AddStockModal onClose={() => setCreateModal(null)} />}
       {createModal === "customer" && <AddCustomerModal onClose={() => setCreateModal(null)} />}
-    </div>
+    </>
   );
 }
 

@@ -3,10 +3,10 @@ import { Navigate } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 import { WrenchIcon, MailCheckIcon, Loader2Icon, ArrowLeftIcon } from "lucide-react";
-import { useAuth } from "@/components/providers/auth.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import { Input } from "@/components/ui/input.tsx";
-import { Label } from "@/components/ui/label.tsx";
+import { useAuth } from "@/components/providers/auth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 type Mode = "signin" | "signup";
 type FieldErrors = Partial<Record<"fullName" | "workshopName" | "email", string>>;
@@ -29,7 +29,7 @@ export default function AuthPage() {
   const [submitting, setSubmitting] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
 
-  if (!isLoading && isAuthenticated) return <Navigate to="/" replace />;
+  if (!isLoading && isAuthenticated) return <Navigate to="/dashboard" replace />;
 
   const clearError = (field: keyof FieldErrors) =>
     setErrors((p) => ({ ...p, [field]: undefined }));

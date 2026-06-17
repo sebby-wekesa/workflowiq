@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
-import { useAuth } from "@/components/providers/auth.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { useAuth } from "@/components/providers/auth";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DiscIcon,
   WrenchIcon,

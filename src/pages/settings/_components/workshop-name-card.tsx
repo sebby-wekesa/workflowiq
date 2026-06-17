@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { BuildingIcon, Loader2Icon } from "lucide-react";
 import { useOrganization, useRenameWorkshop } from "@/lib/api.ts";
-import { useAuth } from "@/components/providers/auth.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import { Input } from "@/components/ui/input.tsx";
-import { Label } from "@/components/ui/label.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
+import { useAuth } from "@/components/providers/auth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function WorkshopNameCard() {
   const { appUser } = useAuth();

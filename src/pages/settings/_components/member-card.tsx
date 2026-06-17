@@ -2,16 +2,16 @@ import { toast } from "sonner";
 import { MoreVerticalIcon, ShieldCheckIcon, ShieldIcon, UserIcon } from "lucide-react";
 import type { AppUser } from "@/lib/supabase.ts";
 import { useChangeRole, useToggleUserActive, useCancelInvite } from "@/lib/api.ts";
-import { Badge } from "@/components/ui/badge.tsx";
-import { Button } from "@/components/ui/button.tsx";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar.tsx";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu.tsx";
+} from "@/components/ui/dropdown-menu";
 
 function initials(name: string | null, email: string | null) {
   const source = (name || email || "?").trim();

@@ -1,13 +1,13 @@
 import { useMemo } from "react";
 import { Navigate } from "react-router-dom";
 import { SettingsIcon, UsersIcon } from "lucide-react";
-import { useAuth } from "@/components/providers/auth.tsx";
+import { useAuth } from "@/components/providers/auth";
 import { useAllUsers } from "@/lib/api.ts";
-import { Badge } from "@/components/ui/badge.tsx";
-import { Skeleton } from "@/components/ui/skeleton.tsx";
-import WorkshopNameCard from "./_components/workshop-name-card.tsx";
-import InviteMemberDialog from "./_components/invite-member-dialog.tsx";
-import MemberCard from "./_components/member-card.tsx";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import WorkshopNameCard from "./_components/workshop-name-card";
+import InviteMemberDialog from "./_components/invite-member-dialog";
+import MemberCard from "./_components/member-card";
 
 export default function SettingsPage() {
   const { appUser, isLoading: authLoading } = useAuth();

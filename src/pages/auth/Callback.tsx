@@ -1,4 +1,4 @@
-// src/pages/auth/Callback.tsx
+// src/pages/auth/Callback
 // Handles the redirect after a magic-link or OAuth sign-in. Supabase parses the
 // session from the URL automatically (detectSessionInUrl: true); we just wait
 // for it and bounce to the dashboard.
@@ -21,7 +21,7 @@ export default function AuthCallback() {
     }
 
     if (!isLoading) {
-      navigate(isAuthenticated ? "/" : "/sign-in", { replace: true });
+      navigate(isAuthenticated ? "/dashboard" : "/sign-in", { replace: true });
     }
   }, [isLoading, isAuthenticated, navigate]);
 
