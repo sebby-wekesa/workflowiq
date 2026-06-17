@@ -16,7 +16,7 @@ import {
   CameraIcon,
   ZapIcon,
 } from "lucide-react";
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 
 const HERO_IMAGE =
   "https://images.unsplash.com/photo-1564030390658-84b5d8fed479?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NzIwMTN8MHwxfHNlYXJjaHwxfHxicmFrZSUyMHNob2UlMjByZWxpbmluZyUyMHdvcmtzaG9wJTIwaW5kdXN0cmlhbCUyMGF1dG9tb3RpdmUlMjByZXBhaXJ8ZW58MHx8fHwxNzc1NTUwNzg3fDA&ixlib=rb-4.1.0&q=80&w=1080";
@@ -90,7 +90,7 @@ export default function Index() {
             <div className="flex size-9 items-center justify-center rounded-lg bg-primary">
               <DiscIcon className="size-5 text-primary-foreground" />
             </div>
-            <span className="text-lg font-bold tracking-tight">BrakePro</span>
+            <span className="text-lg font-bold tracking-tight">WorkflowIq</span>
           </div>
           <div className="flex items-center gap-3">
             <a
@@ -168,7 +168,7 @@ export default function Index() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
             >
-              BrakePro is the complete management system built for brake shoe
+              WorkflowIq is the complete management system built for brake shoe
               relining workshops. From intake to collection, know exactly where
               every job stands.
             </motion.p>
@@ -338,7 +338,7 @@ export default function Index() {
                 </h2>
                 <p className="mt-4 text-muted-foreground">
                   From the moment a customer walks in to the final handover,
-                  BrakePro has you covered.
+                  WorkflowIq has you covered.
                 </p>
               </motion.div>
 
@@ -385,7 +385,7 @@ export default function Index() {
               Built for the way workshops work
             </h2>
             <p className="mt-4 text-lg text-muted-foreground max-w-xl mx-auto">
-              No more paper logs, spreadsheets, or guesswork. BrakePro brings
+              No more paper logs, spreadsheets, or guesswork. WorkflowIq brings
               structure to your operations.
             </p>
           </motion.div>
@@ -470,7 +470,7 @@ export default function Index() {
               ) : (
                 <Button asChild size="lg" variant="secondary">
                   <Link to="/sign-in">
-                    Get Started with BrakePro
+                    Get Started with WorkflowIq
                     <ArrowRightIcon className="size-4" />
                   </Link>
                 </Button>
@@ -487,12 +487,12 @@ export default function Index() {
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary">
               <DiscIcon className="size-4 text-primary-foreground" />
             </div>
-            <span className="text-sm font-bold tracking-tight">BrakePro</span>
+            <span className="text-sm font-bold tracking-tight">WorkflowIq</span>
           </div>
           <p className="text-sm text-muted-foreground">
             {"© "}
             {new Date().getFullYear()}
-            {" Brake Shoe Relining Services. All rights reserved."}
+            {" WorkflowIq. All rights reserved."}
           </p>
         </div>
       </footer>
