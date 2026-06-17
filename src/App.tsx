@@ -7,6 +7,7 @@ import Dashboard from "@/pages/Dashboard";
 import Index from "@/pages/Index";
 import SettingsPage from "@/pages/settings/page";
 import Setup from "@/pages/Setup";
+import AccountingPage from "@/pages/AccountingPage";
 
 export default function App() {
   if (!isSupabaseConfigured) return <Setup />;
@@ -24,6 +25,8 @@ export default function App() {
         <Route path="/deliveries" element={<Dashboard />} />
         <Route path="/staff" element={<Dashboard />} />
         <Route path="/reports" element={<Dashboard />} />
+        <Route path="/accounting" element={<AccountingPage />} />
+        <Route path="/accounting/*" element={<AccountingPage />} />
         <Route path="/settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
