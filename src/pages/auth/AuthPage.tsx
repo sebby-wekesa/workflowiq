@@ -132,20 +132,36 @@ export default function AuthPage() {
         <div className="flex items-center justify-center gap-2">
           <Brand compact={true} />
         </div>
-        <div className="space-y-1 text-center">
-          <h1 className="text-xl font-bold tracking-tight">
-            {isSignup ? "Create your workshop" : "Sign in"}
+        <div className="space-y-4">
+          <p className="text-sm font-semibold uppercase tracking-widest text-white/60">
+            Clear work. Better decisions.
+          </p>
+          <h1 className="text-3xl font-bold tracking-tight">
+            Your workshop's day, organized.
           </h1>
           <p className="text-sm text-muted-foreground">
-            {isSignup
-              ? "Set up a new workspace for your team."
-              : "Welcome back. We'll email you a secure sign-in link."}
+            Track every job from intake to collection and keep stock accountable.
           </p>
+          <div className="grid grid-cols-2 gap-4 text-sm text-white/80">
+            <div className="rounded-lg border border-white/10 bg-white/10 px-3 py-2">Jobs</div>
+            <div className="rounded-lg border border-white/10 bg-white/10 px-3 py-2">Inventory</div>
+            <div className="rounded-lg border border-white/10 bg-white/10 px-3 py-2">Customers</div>
+            <div className="rounded-lg border border-white/10 bg-white/10 px-3 py-2">Team</div>
+            <div className="col-span-2 rounded-lg border border-white/10 bg-white/10 px-3 py-2">
+              Secure workspace
+            </div>
+          </div>
         </div>
       </section>
 
       <section className="auth-form-wrap">
         <div className="auth-card">
+          <div className="auth-heading">
+            <h2 className="text-xl font-bold tracking-tight">Welcome back</h2>
+            <p className="text-sm text-muted-foreground">
+              Enter your email and we will send you a sign-in link.
+            </p>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             {isSignup && (
               <>
@@ -186,13 +202,13 @@ export default function AuthPage() {
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="email">Email address</Label>
+              <Label htmlFor="email">Work email</Label>
               <Input
                 id="email"
                 type="email"
                 inputMode="email"
                 autoComplete="email"
-                placeholder="you@example.com"
+                placeholder="you@company.com"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
@@ -205,7 +221,7 @@ export default function AuthPage() {
 
             <Button type="submit" className="w-full gap-1.5" disabled={submitting}>
               {submitting && <Loader2Icon className="size-4 animate-spin" />}
-              {isSignup ? "Create workshop" : "Email me a link"}
+              {isSignup ? "Create workshop" : "Continue with email"}
             </Button>
           </form>
 
@@ -226,7 +242,7 @@ export default function AuthPage() {
               </>
             ) : (
               <>
-                New here?{" "}
+                Starting a new workshop?{" "}
                 <button
                   type="button"
                   className="font-medium text-primary underline-offset-4 hover:underline"
@@ -235,7 +251,7 @@ export default function AuthPage() {
                     setErrors({});
                   }}
                 >
-                  Create a workshop
+                  Create one
                 </button>
               </>
             )}
