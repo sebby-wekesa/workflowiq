@@ -157,7 +157,7 @@ export default function AppSidebar() {
             </div>
             <button
               onClick={() => signOut()}
-              className="flex items-center gap-2 w-full px-2 py-1.5 text-sm text-sidebar-foreground/60 hover:text-sidebar-foreground rounded-md hover:bg-sidebar-accent transition-colors"
+              className="sign-out"
             >
               <LogOutIcon className="size-4" />
               <span>Sign out</span>
