@@ -7,6 +7,7 @@ import {
   PackageIcon,
   UserCogIcon,
   BarChart3Icon,
+  LandmarkIcon,
   SettingsIcon,
   LogOutIcon,
   DiscIcon,
@@ -37,6 +38,7 @@ const NAV_ITEMS = [
   { label: "Stock", href: "/stock", icon: PackageIcon },
   { label: "Staff", href: "/staff", icon: UserCogIcon },
   { label: "Reports", href: "/reports", icon: BarChart3Icon },
+  { label: "Accounting", href: "/accounting", icon: LandmarkIcon },
 ];
 
 function getInitials(name?: string | null): string {
@@ -52,6 +54,8 @@ function getInitials(name?: string | null): string {
 export default function AppSidebar() {
   const location = useLocation();
   const { appUser, organization, signOut } = useAuth();
+  const isActive = (href: string) =>
+    location.pathname === href || (href !== "/dashboard" && location.pathname.startsWith(`${href}/`));
 
   return (
     <Sidebar>
@@ -82,7 +86,7 @@ export default function AppSidebar() {
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton
                     asChild
-                    isActive={location.pathname === item.href}
+                    isActive={isActive(item.href)}
                     tooltip={item.label}
                   >
                     <Link to={item.href}>

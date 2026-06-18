@@ -1,4 +1,8 @@
-import React from "react"
-export const Label = ({ children, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) => (
-  <label {...props}>{children}</label>
-)
+import React from "react";
+import { cn } from "@/lib/utils";
+
+export const Label = ({ children, className, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) => (
+  <label className={cn("text-sm font-medium", className)} {...props}>
+    {children}
+  </label>
+);

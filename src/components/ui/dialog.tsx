@@ -1,7 +1,18 @@
-import React from "react";
+import React, { createContext, useContext, useState } from "react";
 import { cn } from "@/lib/utils";
 
 type DivProps = React.HTMLAttributes<HTMLDivElement>;
+
+type DialogContextValue = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+};
+
+const DialogContext = createContext<DialogContextValue | null>(null);
+
+function useDialog() {
+  return useContext(DialogContext);
+}
 
 export const Dialog = ({
   open,
@@ -11,7 +22,17 @@ export const Dialog = ({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   children?: React.ReactNode;
-}) => <>{children}</>;
+}) => {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const currentOpen = open ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
+
+  return (
+    <DialogContext.Provider value={{ open: currentOpen, setOpen }}>
+      {children}
+    </DialogContext.Provider>
+  );
+};
 
 export const DialogHeader = ({ children, className, ...props }: DivProps) => (
   <div className={cn("flex flex-col gap-1.5 text-center sm:text-left", className)} {...props}>
@@ -42,27 +63,53 @@ export const DialogClose = ({
   onClick,
   className,
   ...props
-}: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
-  <button type="button" onClick={onClick} className={cn("dialog-close", className)} {...props}>
-    {children}
-  </button>
-);
+}: React.ButtonHTMLAttributes<HTMLButtonElement>) => {
+  const dialog = useDialog();
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) dialog?.setOpen(false);
+      }}
+      className={cn("dialog-close", className)}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+};
 
 export const DialogContent = ({
   children,
   className,
   ...props
-}: DivProps & { open?: boolean; onOpenChange?: (open: boolean) => void }) => (
-  <div
-    className={cn(
-      "fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl border bg-card p-6 shadow-lg",
-      className,
-    )}
-    {...props}
-  >
-    {children}
-  </div>
-);
+}: DivProps & { open?: boolean; onOpenChange?: (open: boolean) => void }) => {
+  const dialog = useDialog();
+  if (dialog && !dialog.open) return null;
+
+  return (
+    <div
+      className="dialog-overlay"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) dialog?.setOpen(false);
+      }}
+    >
+      <div
+        className={cn(
+          "dialog-content grid w-full max-w-lg gap-4 rounded-xl border bg-card p-6 shadow-lg",
+          className,
+        )}
+        role="dialog"
+        aria-modal="true"
+        onMouseDown={(event) => event.stopPropagation()}
+        {...props}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
 
 export const DialogTrigger = ({
   children,
@@ -70,14 +117,21 @@ export const DialogTrigger = ({
   className,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { asChild?: boolean }) => {
+  const dialog = useDialog();
+  const handleClick: React.MouseEventHandler<HTMLButtonElement> = (event) => {
+    props.onClick?.(event);
+    if (!event.defaultPrevented) dialog?.setOpen(true);
+  };
+
   if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children as React.ReactElement<{ className?: string }>, {
+    return React.cloneElement(children as React.ReactElement<{ className?: string; onClick?: React.MouseEventHandler<HTMLButtonElement> }>, {
       className: cn((children.props as { className?: string }).className),
       ...props,
+      onClick: handleClick,
     });
   }
   return (
-    <button type="button" className={cn("dialog-trigger", className)} {...props}>
+    <button type="button" className={cn("dialog-trigger", className)} {...props} onClick={handleClick}>
       {children}
     </button>
   );

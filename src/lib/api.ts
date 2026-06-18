@@ -17,6 +17,9 @@ import {
   supabase, type Customer, type Stock, type Job, type AppUser, type Organization,
   type JobCondition, type JobPriority, type StockCategory,
   type MovementType, type DeliveryCondition, type Material,
+  type AccountingBill, type AccountingExpense, type AccountingInvoice,
+  type AccountingPayment, type ChartAccount, type JournalEntry, type LedgerLine,
+  type Supplier,
 } from "@/lib/supabase";
 
 function unwrap<T>(res: { data: T | null; error: { message: string } | null }): T {
@@ -320,3 +323,554 @@ export const useChangeRole = userMutation(usersApi.changeRole);
 export const useToggleUserActive = userMutation(usersApi.toggleActive);
 export const useInviteUser = userMutation(usersApi.invite);
 export const useCancelInvite = userMutation(usersApi.cancelInvite);
+
+// =====================================================================
+// ACCOUNTING
+// =====================================================================
+export type JournalLineInput = {
+  accountId: string;
+  debit?: number;
+  credit?: number;
+  description?: string;
+};
+
+export type TrialBalanceRow = {
+  accountId: string;
+  code: string;
+  name: string;
+  type: string;
+  debit: number;
+  credit: number;
+};
+
+export type LedgerReportLine = {
+  date: string;
+  entryNumber: string;
+  memo: string | null;
+  source: string;
+  debit: number;
+  credit: number;
+  balance: number;
+  description: string | null;
+};
+
+export type ProfitLossReport = {
+  income: { code: string; name: string; amount: number }[];
+  expenses: { code: string; name: string; amount: number }[];
+  totalIncome: number;
+  costOfSales: number;
+  grossProfit: number;
+  totalExpense: number;
+  netProfit: number;
+  grossMargin: number;
+  netMargin: number;
+};
+
+export type BalanceSheetReport = {
+  assets: { code: string; name: string; amount: number }[];
+  liabilities: { code: string; name: string; amount: number }[];
+  equity: { code: string; name: string; amount: number }[];
+  totalAssets: number;
+  totalLiabilities: number;
+  totalEquity: number;
+  totalLiabAndEquity: number;
+  balanced: boolean;
+};
+
+export type PartyLedgerRow = {
+  id: string;
+  name: string;
+  phone?: string | null;
+  billed: number;
+  paid: number;
+  outstanding: number;
+};
+
+type PostedEntry = JournalEntry & {
+  ledger_line?: LedgerLine[];
+};
+
+const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+const num = (n: unknown) => Number(n ?? 0);
+
+function dateEnd(value: string) {
+  return `${value}T23:59:59.999Z`;
+}
+
+function toDbLines(lines: JournalLineInput[]) {
+  return lines.map((line) => ({
+    account_id: line.accountId,
+    debit: line.debit ?? 0,
+    credit: line.credit ?? 0,
+    description: line.description ?? null,
+  }));
+}
+
+async function postedEntries(input?: { from?: string; to?: string }): Promise<PostedEntry[]> {
+  let q = supabase
+    .from("journal_entry")
+    .select("*, ledger_line(*)")
+    .eq("status", "POSTED")
+    .order("date", { ascending: true });
+
+  if (input?.from) q = q.gte("date", input.from);
+  if (input?.to) q = q.lte("date", dateEnd(input.to));
+
+  return q.then(unwrap<PostedEntry[]>);
+}
+
+function aggregateLines(entries: PostedEntry[]) {
+  const totals = new Map<string, { debit: number; credit: number }>();
+  for (const entry of entries) {
+    for (const line of entry.ledger_line ?? []) {
+      const cur = totals.get(line.account_id) ?? { debit: 0, credit: 0 };
+      cur.debit += num(line.debit);
+      cur.credit += num(line.credit);
+      totals.set(line.account_id, cur);
+    }
+  }
+  return totals;
+}
+
+export const accountingApi = {
+  seedChart: () => supabase.rpc("seed_chart_of_accounts").then(unwrap<{ success: boolean; created: number; total: number }>),
+  listAccounts: () =>
+    supabase.from("chart_account").select("*").order("code").then(unwrap<ChartAccount[]>),
+  listActiveAccounts: () =>
+    supabase.from("chart_account").select("*").eq("is_active", true).order("code").then(unwrap<ChartAccount[]>),
+  createAccount: (input: {
+    code: string;
+    name: string;
+    type: ChartAccount["type"];
+    normalBalance?: ChartAccount["normal_balance"];
+    isBank?: boolean;
+  }) => {
+    const normalBalance = input.normalBalance ?? (["ASSET", "EXPENSE"].includes(input.type) ? "DEBIT" : "CREDIT");
+    return supabase
+      .from("chart_account")
+      .insert({
+        code: input.code.trim(),
+        name: input.name.trim(),
+        type: input.type,
+        normal_balance: normalBalance,
+        is_bank: input.isBank ?? false,
+        is_system: false,
+      })
+      .select("id")
+      .single()
+      .then(unwrap<{ id: string }>);
+  },
+  updateAccount: (input: { id: string; name?: string; isActive?: boolean; isBank?: boolean }) =>
+    supabase
+      .from("chart_account")
+      .update({
+        ...(input.name != null ? { name: input.name.trim() } : {}),
+        ...(input.isActive != null ? { is_active: input.isActive } : {}),
+        ...(input.isBank != null ? { is_bank: input.isBank } : {}),
+      })
+      .eq("id", input.id)
+      .then(unwrap),
+  postJournal: (input: { date: string; memo?: string; lines: JournalLineInput[] }) =>
+    supabase
+      .rpc("post_journal_entry", {
+        p_date: input.date,
+        p_memo: input.memo ?? null,
+        p_source: "MANUAL",
+        p_source_type: "ManualJournal",
+        p_source_id: null,
+        p_lines: toDbLines(input.lines),
+      })
+      .then(unwrap<{ success?: boolean; entry_number: string; entryNumber: string }>),
+  listJournalEntries: () => postedEntries(),
+  listSuppliers: () =>
+    supabase.from("suppliers").select("*").order("name").then(unwrap<Supplier[]>),
+  createSupplier: (input: { name: string; phone?: string; email?: string; location?: string; notes?: string }) =>
+    supabase
+      .from("suppliers")
+      .insert({
+        name: input.name.trim(),
+        phone: input.phone?.trim() ?? "",
+        email: input.email?.trim() || null,
+        location: input.location?.trim() || null,
+        notes: input.notes?.trim() || null,
+      })
+      .select("id")
+      .single()
+      .then(unwrap<{ id: string }>),
+  listInvoices: () =>
+    supabase
+      .from("accounting_invoices")
+      .select("*, customer:customers(name, phone)")
+      .order("date", { ascending: false })
+      .then(unwrap<(AccountingInvoice & { customer: { name: string; phone: string } | null })[]>),
+  listBills: () =>
+    supabase
+      .from("accounting_bills")
+      .select("*, supplier:suppliers(name, phone)")
+      .order("date", { ascending: false })
+      .then(unwrap<(AccountingBill & { supplier: { name: string; phone: string } | null })[]>),
+  listExpenses: () =>
+    supabase
+      .from("accounting_expenses")
+      .select("*, supplier:suppliers(name)")
+      .order("date", { ascending: false })
+      .then(unwrap<(AccountingExpense & { supplier: { name: string } | null })[]>),
+  listPayments: () =>
+    supabase
+      .from("accounting_payments")
+      .select("*, customer:customers(name), supplier:suppliers(name)")
+      .order("date", { ascending: false })
+      .then(unwrap<(AccountingPayment & { customer: { name: string } | null; supplier: { name: string } | null })[]>),
+  postInvoice: (input: {
+    customerId: string;
+    jobId?: string | null;
+    date: string;
+    dueDate?: string | null;
+    amount: number;
+    hasVat: boolean;
+    memo?: string;
+  }) =>
+    supabase.rpc("post_accounting_invoice", {
+      p_customer_id: input.customerId,
+      p_job_id: input.jobId ?? null,
+      p_date: input.date,
+      p_due_date: input.dueDate ?? null,
+      p_amount: input.amount,
+      p_has_vat: input.hasVat,
+      p_memo: input.memo ?? null,
+    }).then(unwrap<{ success: boolean; invoiceNumber: string; entryNumber: string }>),
+  postBill: (input: {
+    supplierId: string;
+    accountId: string;
+    date: string;
+    dueDate?: string | null;
+    amount: number;
+    hasVat: boolean;
+    memo?: string;
+  }) =>
+    supabase.rpc("post_accounting_bill", {
+      p_supplier_id: input.supplierId,
+      p_account_id: input.accountId,
+      p_date: input.date,
+      p_due_date: input.dueDate ?? null,
+      p_amount: input.amount,
+      p_has_vat: input.hasVat,
+      p_memo: input.memo ?? null,
+    }).then(unwrap<{ success: boolean; billNumber: string; entryNumber: string }>),
+  postExpense: (input: {
+    expenseAccountId: string;
+    bankAccountId?: string | null;
+    supplierId?: string | null;
+    vendorName?: string;
+    date: string;
+    amount: number;
+    hasVat: boolean;
+    memo?: string;
+    reference?: string;
+  }) =>
+    supabase.rpc("post_accounting_expense", {
+      p_expense_account_id: input.expenseAccountId,
+      p_bank_account_id: input.bankAccountId ?? null,
+      p_supplier_id: input.supplierId ?? null,
+      p_vendor_name: input.vendorName ?? null,
+      p_date: input.date,
+      p_amount: input.amount,
+      p_has_vat: input.hasVat,
+      p_memo: input.memo ?? null,
+      p_reference: input.reference ?? null,
+    }).then(unwrap<{ success: boolean; expenseNumber: string; entryNumber: string }>),
+  recordPayment: (input: {
+    direction: "received" | "paid";
+    customerId?: string | null;
+    supplierId?: string | null;
+    invoiceId?: string | null;
+    billId?: string | null;
+    bankAccountId?: string | null;
+    date: string;
+    amount: number;
+    method?: string;
+    reference?: string;
+    notes?: string;
+  }) =>
+    supabase.rpc("record_accounting_payment", {
+      p_direction: input.direction,
+      p_customer_id: input.customerId ?? null,
+      p_supplier_id: input.supplierId ?? null,
+      p_invoice_id: input.invoiceId ?? null,
+      p_bill_id: input.billId ?? null,
+      p_bank_account_id: input.bankAccountId ?? null,
+      p_date: input.date,
+      p_amount: input.amount,
+      p_method: input.method ?? "bank_transfer",
+      p_reference: input.reference ?? null,
+      p_notes: input.notes ?? null,
+    }).then(unwrap<{ success: boolean; paymentNumber: string; entryNumber: string }>),
+  getTrialBalance: async (asOf?: string) => {
+    const [accounts, entries] = await Promise.all([
+      accountingApi.listActiveAccounts(),
+      postedEntries(asOf ? { to: asOf } : undefined),
+    ]);
+    const totals = aggregateLines(entries);
+    let totalDebit = 0;
+    let totalCredit = 0;
+    const rows: TrialBalanceRow[] = [];
+
+    for (const account of accounts) {
+      const sum = totals.get(account.id) ?? { debit: 0, credit: 0 };
+      const net = sum.debit - sum.credit;
+      const debit = net > 0 ? r2(net) : 0;
+      const credit = net < 0 ? r2(-net) : 0;
+      if (debit === 0 && credit === 0) continue;
+      totalDebit += debit;
+      totalCredit += credit;
+      rows.push({
+        accountId: account.id,
+        code: account.code,
+        name: account.name,
+        type: account.type,
+        debit,
+        credit,
+      });
+    }
+
+    return {
+      asOf: asOf ?? new Date().toISOString().slice(0, 10),
+      rows,
+      totalDebit: r2(totalDebit),
+      totalCredit: r2(totalCredit),
+      balanced: Math.abs(totalDebit - totalCredit) < 0.01,
+    };
+  },
+  getGeneralLedger: async (input: { accountId?: string; from?: string; to?: string }) => {
+    const accounts = await accountingApi.listActiveAccounts();
+    if (!input.accountId) {
+      return { accounts, account: null, openingBalance: 0, lines: [] as LedgerReportLine[] };
+    }
+
+    const account = accounts.find((a) => a.id === input.accountId) ?? null;
+    if (!account) return { accounts, account: null, openingBalance: 0, lines: [] as LedgerReportLine[] };
+
+    const allEntries = await postedEntries({ to: input.to });
+    let openingBalance = 0;
+    const lines: LedgerReportLine[] = [];
+
+    for (const entry of allEntries) {
+      const entryDate = new Date(entry.date);
+      const beforeFrom = input.from ? entryDate < new Date(input.from) : false;
+      for (const line of entry.ledger_line ?? []) {
+        if (line.account_id !== input.accountId) continue;
+        const debit = num(line.debit);
+        const credit = num(line.credit);
+        const movement = account.normal_balance === "DEBIT" ? debit - credit : credit - debit;
+        if (beforeFrom) {
+          openingBalance += movement;
+          continue;
+        }
+        const nextBalance = (lines.at(-1)?.balance ?? openingBalance) + movement;
+        lines.push({
+          date: entry.date,
+          entryNumber: entry.entry_number,
+          memo: entry.memo,
+          source: entry.source,
+          debit,
+          credit,
+          balance: r2(nextBalance),
+          description: line.description,
+        });
+      }
+    }
+
+    return { accounts, account, openingBalance: r2(openingBalance), lines };
+  },
+  getProfitAndLoss: async (input?: { from?: string; to?: string }): Promise<ProfitLossReport> => {
+    const [accounts, entries] = await Promise.all([
+      accountingApi.listActiveAccounts(),
+      postedEntries(input),
+    ]);
+    const totals = aggregateLines(entries);
+    const income: ProfitLossReport["income"] = [];
+    const expenses: ProfitLossReport["expenses"] = [];
+    let totalIncome = 0;
+    let totalExpense = 0;
+    let costOfSales = 0;
+
+    for (const account of accounts) {
+      const sum = totals.get(account.id) ?? { debit: 0, credit: 0 };
+      if (account.type === "INCOME") {
+        const amount = sum.credit - sum.debit;
+        if (amount !== 0) {
+          income.push({ code: account.code, name: account.name, amount: r2(amount) });
+          totalIncome += amount;
+        }
+      } else if (account.type === "EXPENSE") {
+        const amount = sum.debit - sum.credit;
+        if (amount !== 0) {
+          expenses.push({ code: account.code, name: account.name, amount: r2(amount) });
+          totalExpense += amount;
+          if (account.code === "5000") costOfSales += amount;
+        }
+      }
+    }
+
+    const grossProfit = totalIncome - costOfSales;
+    const netProfit = totalIncome - totalExpense;
+    return {
+      income,
+      expenses,
+      totalIncome: r2(totalIncome),
+      costOfSales: r2(costOfSales),
+      grossProfit: r2(grossProfit),
+      totalExpense: r2(totalExpense),
+      netProfit: r2(netProfit),
+      grossMargin: totalIncome ? r2((grossProfit / totalIncome) * 100) : 0,
+      netMargin: totalIncome ? r2((netProfit / totalIncome) * 100) : 0,
+    };
+  },
+  getBalanceSheet: async (asOf?: string): Promise<BalanceSheetReport> => {
+    const [accounts, entries] = await Promise.all([
+      accountingApi.listActiveAccounts(),
+      postedEntries(asOf ? { to: asOf } : undefined),
+    ]);
+    const totals = aggregateLines(entries);
+    const assets: BalanceSheetReport["assets"] = [];
+    const liabilities: BalanceSheetReport["liabilities"] = [];
+    const equity: BalanceSheetReport["equity"] = [];
+    let totalAssets = 0;
+    let totalLiabilities = 0;
+    let totalEquity = 0;
+    let income = 0;
+    let expenses = 0;
+
+    for (const account of accounts) {
+      const sum = totals.get(account.id) ?? { debit: 0, credit: 0 };
+      if (account.type === "ASSET") {
+        const amount = sum.debit - sum.credit;
+        if (amount !== 0) {
+          assets.push({ code: account.code, name: account.name, amount: r2(amount) });
+          totalAssets += amount;
+        }
+      } else if (account.type === "LIABILITY") {
+        const amount = sum.credit - sum.debit;
+        if (amount !== 0) {
+          liabilities.push({ code: account.code, name: account.name, amount: r2(amount) });
+          totalLiabilities += amount;
+        }
+      } else if (account.type === "EQUITY") {
+        const amount = sum.credit - sum.debit;
+        if (amount !== 0) {
+          equity.push({ code: account.code, name: account.name, amount: r2(amount) });
+          totalEquity += amount;
+        }
+      } else if (account.type === "INCOME") {
+        income += sum.credit - sum.debit;
+      } else if (account.type === "EXPENSE") {
+        expenses += sum.debit - sum.credit;
+      }
+    }
+
+    const currentEarnings = income - expenses;
+    if (currentEarnings !== 0) {
+      equity.push({ code: "-", name: "Current Year Earnings", amount: r2(currentEarnings) });
+      totalEquity += currentEarnings;
+    }
+    const totalLiabAndEquity = totalLiabilities + totalEquity;
+    return {
+      assets,
+      liabilities,
+      equity,
+      totalAssets: r2(totalAssets),
+      totalLiabilities: r2(totalLiabilities),
+      totalEquity: r2(totalEquity),
+      totalLiabAndEquity: r2(totalLiabAndEquity),
+      balanced: Math.abs(totalAssets - totalLiabAndEquity) < 0.01,
+    };
+  },
+  getCustomerLedger: async () => {
+    const [customers, invoices, payments] = await Promise.all([
+      customersApi.list(),
+      supabase.from("accounting_invoices").select("*").neq("status", "void").then(unwrap<AccountingInvoice[]>),
+      supabase.from("accounting_payments").select("*").eq("direction", "received").then(unwrap<AccountingPayment[]>),
+    ]);
+    const billed = new Map<string, number>();
+    const paid = new Map<string, number>();
+    for (const invoice of invoices) billed.set(invoice.customer_id, (billed.get(invoice.customer_id) ?? 0) + num(invoice.total_amount));
+    for (const payment of payments) {
+      if (payment.customer_id) paid.set(payment.customer_id, (paid.get(payment.customer_id) ?? 0) + num(payment.amount));
+    }
+    const rows = customers.map((customer) => {
+      const b = billed.get(customer.id) ?? 0;
+      const p = paid.get(customer.id) ?? 0;
+      return { id: customer.id, name: customer.name, phone: customer.phone, billed: r2(b), paid: r2(p), outstanding: r2(b - p) };
+    }).filter((row) => row.billed !== 0 || row.paid !== 0);
+    return { rows, totalOutstanding: r2(rows.reduce((sum, row) => sum + row.outstanding, 0)) };
+  },
+  getSupplierLedger: async () => {
+    const [suppliers, bills, payments] = await Promise.all([
+      accountingApi.listSuppliers(),
+      supabase.from("accounting_bills").select("*").neq("status", "void").then(unwrap<AccountingBill[]>),
+      supabase.from("accounting_payments").select("*").eq("direction", "paid").then(unwrap<AccountingPayment[]>),
+    ]);
+    const billed = new Map<string, number>();
+    const paid = new Map<string, number>();
+    for (const bill of bills) billed.set(bill.supplier_id, (billed.get(bill.supplier_id) ?? 0) + num(bill.total_amount));
+    for (const payment of payments) {
+      if (payment.supplier_id) paid.set(payment.supplier_id, (paid.get(payment.supplier_id) ?? 0) + num(payment.amount));
+    }
+    const rows = suppliers.map((supplier) => {
+      const b = billed.get(supplier.id) ?? 0;
+      const p = paid.get(supplier.id) ?? 0;
+      return { id: supplier.id, name: supplier.name, phone: supplier.phone, billed: r2(b), paid: r2(p), outstanding: r2(b - p) };
+    }).filter((row) => row.billed !== 0 || row.paid !== 0);
+    return { rows, totalOutstanding: r2(rows.reduce((sum, row) => sum + row.outstanding, 0)) };
+  },
+};
+
+function accountingMutation<TArgs, TResult>(fn: (a: TArgs) => PromiseLike<TResult>) {
+  return () => {
+    const qc = useQueryClient();
+    return useMutation({
+      mutationFn: async (args: TArgs) => fn(args),
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ["accounting"] });
+        qc.invalidateQueries({ queryKey: ["customers"] });
+      },
+    });
+  };
+}
+
+export const useAccountingAccounts = () =>
+  useQuery({ queryKey: ["accounting", "accounts"], queryFn: async () => accountingApi.listAccounts() });
+export const useAccountingEntries = () =>
+  useQuery({ queryKey: ["accounting", "entries"], queryFn: async () => accountingApi.listJournalEntries() });
+export const useAccountingSuppliers = () =>
+  useQuery({ queryKey: ["accounting", "suppliers"], queryFn: async () => accountingApi.listSuppliers() });
+export const useAccountingInvoices = () =>
+  useQuery({ queryKey: ["accounting", "invoices"], queryFn: async () => accountingApi.listInvoices() });
+export const useAccountingBills = () =>
+  useQuery({ queryKey: ["accounting", "bills"], queryFn: async () => accountingApi.listBills() });
+export const useAccountingExpenses = () =>
+  useQuery({ queryKey: ["accounting", "expenses"], queryFn: async () => accountingApi.listExpenses() });
+export const useAccountingPayments = () =>
+  useQuery({ queryKey: ["accounting", "payments"], queryFn: async () => accountingApi.listPayments() });
+export const useTrialBalance = (asOf?: string) =>
+  useQuery({ queryKey: ["accounting", "trial-balance", asOf], queryFn: () => accountingApi.getTrialBalance(asOf) });
+export const useGeneralLedger = (input: { accountId?: string; from?: string; to?: string }) =>
+  useQuery({ queryKey: ["accounting", "ledger", input], queryFn: () => accountingApi.getGeneralLedger(input) });
+export const useProfitAndLoss = (input?: { from?: string; to?: string }) =>
+  useQuery({ queryKey: ["accounting", "profit-loss", input], queryFn: () => accountingApi.getProfitAndLoss(input) });
+export const useBalanceSheet = (asOf?: string) =>
+  useQuery({ queryKey: ["accounting", "balance-sheet", asOf], queryFn: () => accountingApi.getBalanceSheet(asOf) });
+export const useCustomerLedger = () =>
+  useQuery({ queryKey: ["accounting", "customer-ledger"], queryFn: async () => accountingApi.getCustomerLedger() });
+export const useSupplierLedger = () =>
+  useQuery({ queryKey: ["accounting", "supplier-ledger"], queryFn: async () => accountingApi.getSupplierLedger() });
+
+export const useSeedChartOfAccounts = accountingMutation<void, { success: boolean; created: number; total: number }>(() => accountingApi.seedChart());
+export const useCreateAccountingAccount = accountingMutation(accountingApi.createAccount);
+export const useUpdateAccountingAccount = accountingMutation(accountingApi.updateAccount);
+export const usePostJournal = accountingMutation(accountingApi.postJournal);
+export const useCreateSupplier = accountingMutation(accountingApi.createSupplier);
+export const usePostInvoice = accountingMutation(accountingApi.postInvoice);
+export const usePostBill = accountingMutation(accountingApi.postBill);
+export const usePostExpense = accountingMutation(accountingApi.postExpense);
+export const useRecordAccountingPayment = accountingMutation(accountingApi.recordPayment);

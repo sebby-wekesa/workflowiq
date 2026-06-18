@@ -101,3 +101,140 @@ export interface Job {
   created_by: string | null;
   created_at: string;
 }
+
+export type AccountType = "ASSET" | "LIABILITY" | "EQUITY" | "INCOME" | "EXPENSE";
+export type NormalBalance = "DEBIT" | "CREDIT";
+
+export interface ChartAccount {
+  id: string;
+  org_id: string;
+  code: string;
+  name: string;
+  type: AccountType;
+  normal_balance: NormalBalance;
+  is_bank: boolean;
+  is_system: boolean;
+  is_active: boolean;
+  description: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface JournalEntry {
+  id: string;
+  org_id: string;
+  entry_number: string;
+  date: string;
+  memo: string | null;
+  status: string;
+  source: string;
+  source_type: string | null;
+  source_id: string | null;
+  total_debit: number;
+  total_credit: number;
+  posted_at: string | null;
+  posted_by: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface LedgerLine {
+  id: string;
+  org_id: string;
+  journal_entry_id: string;
+  account_id: string;
+  debit: number;
+  credit: number;
+  description: string | null;
+  created_at: string;
+}
+
+export interface Supplier {
+  id: string;
+  org_id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  location: string | null;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AccountingInvoice {
+  id: string;
+  org_id: string;
+  invoice_number: string;
+  customer_id: string;
+  job_id: string | null;
+  date: string;
+  due_date: string | null;
+  status: string;
+  has_vat: boolean;
+  net_amount: number;
+  vat_amount: number;
+  total_amount: number;
+  memo: string | null;
+  journal_entry_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AccountingBill {
+  id: string;
+  org_id: string;
+  bill_number: string;
+  supplier_id: string;
+  account_id: string;
+  date: string;
+  due_date: string | null;
+  status: string;
+  has_vat: boolean;
+  net_amount: number;
+  vat_amount: number;
+  total_amount: number;
+  memo: string | null;
+  journal_entry_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AccountingExpense {
+  id: string;
+  org_id: string;
+  expense_number: string;
+  supplier_id: string | null;
+  vendor_name: string | null;
+  expense_account_id: string;
+  bank_account_id: string;
+  date: string;
+  has_vat: boolean;
+  net_amount: number;
+  vat_amount: number;
+  total_amount: number;
+  memo: string | null;
+  reference: string | null;
+  journal_entry_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AccountingPayment {
+  id: string;
+  org_id: string;
+  payment_number: string;
+  direction: "received" | "paid";
+  customer_id: string | null;
+  supplier_id: string | null;
+  invoice_id: string | null;
+  bill_id: string | null;
+  bank_account_id: string;
+  method: string;
+  date: string;
+  amount: number;
+  reference: string | null;
+  notes: string | null;
+  journal_entry_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
