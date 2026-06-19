@@ -17,7 +17,12 @@
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, input, select, textarea { font: inherit; }
-button { cursor: pointer; }
+button {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
 
 .brand { display: flex; align-items: center; gap: 12px; color: #f8fffc; }
 .brand-mark { width: 32px; height: 32px; display: flex; align-items: end; gap: 3px; padding: 7px; border-radius: 10px; background: #b4f23c; }
@@ -62,11 +67,26 @@ button { cursor: pointer; }
 .auth-card label { display: grid; gap: 7px; color: #40544f; font-size: 12px; font-weight: 700; }
 .auth-card input { width: 100%; padding: 13px 14px; outline: none; border: 1px solid #d5dfd8; border-radius: 10px; background: #fbfdfb; color: #17302a; transition: .2s; }
 .auth-card input:focus { border-color: #8bbf3b; box-shadow: 0 0 0 4px #eff8e3; }
-.button { min-height: 46px; border: 0; border-radius: 10px; font-size: 13px; font-weight: 750; }
-.button:disabled { opacity: .6; cursor: wait; }
+.button {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 15px;
+  border: 0;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1;
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease;
+}
+.button:disabled,
+.add-button:disabled { opacity: .55; cursor: not-allowed; }
 .button-primary { margin-top: 5px; background: var(--color-primary); color: var(--color-primary-foreground); }
-.button-primary:hover { background: #214b41; }
+.button-primary:hover:not(:disabled) { background: #214b41; }
 .button-secondary { border: 1px solid var(--color-border); background: var(--color-secondary); color: #3f554f; }
+.button-secondary:hover:not(:disabled) { background: #f7faf8; color: #243d35; }
 .form-message { margin: 0; padding: 10px; border-radius: 8px; background: #edf6e4; color: #4a6925; font-size: 12px; line-height: 1.5; }
 .form-message-error { background: #fbefec; color: #9a4e3e; }
 .auth-switch { margin: 7px 0 0; color: #84938f; text-align: center; font-size: 12px; }
@@ -115,8 +135,24 @@ button { cursor: pointer; }
 .card-heading { display: flex; align-items: center; justify-content: space-between; padding: 20px 21px 15px; }
 .card-heading h2 { margin: 0; color: #213630; font-size: 16px; letter-spacing: -.5px; }
 .card-heading > span { color: #789088; font-size: 10px; font-weight: 700; }
-.add-button { min-height: 35px; padding: 0 13px; border: 0; border-radius: 8px; background: #17352e; color: #fff; font-size: 11px; font-weight: 750; }
-.add-button:hover { background: #214b41; }
+.add-button {
+  display: inline-flex;
+  min-height: 35px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 0;
+  border-radius: 8px;
+  background: #17352e;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease;
+}
+.add-button:hover:not(:disabled) { background: #214b41; }
 .jobs-section { margin-top: 16px; }
 .section-heading { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-bottom: 15px; }
 .section-heading h2 { margin: 0; color: #213630; font-size: 19px; letter-spacing: -.7px; }
@@ -788,6 +824,7 @@ textarea:focus,
 .hover\:underline:hover { text-decoration: underline; }
 .underline-offset-4 { text-underline-offset: 4px; }
 button.text-primary.underline-offset-4 {
+  height: auto;
   min-height: 0;
   padding: 0;
   border: 0;
@@ -806,8 +843,14 @@ button.text-primary.underline-offset-4 {
 .hover\:shadow-md:hover { box-shadow: 0 12px 30px rgba(17, 36, 31, .12); }
 .focus\:text-destructive:focus { color: var(--destructive); }
 .focus-visible\:outline-none:focus-visible { outline: none; }
-.focus-visible\:ring-2:focus-visible { box-shadow: 0 0 0 2px var(--ring); }
-.focus-visible\:ring-offset-2:focus-visible { outline-offset: 2px; }
+.focus-visible\:ring-ring:focus-visible { --tw-ring-color: var(--ring); }
+.ring-offset-background { --tw-ring-offset-color: var(--background); }
+.focus-visible\:ring-2:focus-visible {
+  box-shadow:
+    0 0 0 var(--tw-ring-offset-width, 0px) var(--tw-ring-offset-color, var(--background)),
+    0 0 0 calc(2px + var(--tw-ring-offset-width, 0px)) var(--tw-ring-color, var(--ring));
+}
+.focus-visible\:ring-offset-2:focus-visible { --tw-ring-offset-width: 2px; }
 .disabled\:opacity-50:disabled { opacity: .5; }
 .disabled\:pointer-events-none:disabled { pointer-events: none; }
 .group:hover .group-hover\:bg-primary\/10 { background-color: rgba(var(--primary-rgb), .1); }

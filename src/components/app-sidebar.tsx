@@ -156,6 +156,7 @@ export default function AppSidebar() {
               </div>
             </div>
             <button
+              type="button"
               onClick={() => signOut()}
               className="sign-out"
             >

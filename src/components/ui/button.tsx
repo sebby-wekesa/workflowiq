@@ -38,6 +38,7 @@ export const Button: React.FC<ButtonProps> = ({
   size = "default",
   className = "",
   asChild,
+  type = "button",
   ...rest
 }) => {
   const classes = buttonClasses(variant, size, className);
@@ -50,7 +51,7 @@ export const Button: React.FC<ButtonProps> = ({
   }
 
   return (
-    <button className={classes} {...rest}>
+    <button type={type} className={classes} {...rest}>
       {children}
     </button>
   );

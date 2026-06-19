@@ -126,7 +126,7 @@ export default function AccountingPage() {
           <p style={{ margin: "0 0 18px", color: "#657c76", fontSize: 13 }}>
             Seed the standard accounts before posting invoices, expenses, payments, or manual journals.
           </p>
-          <button className="add-button" onClick={handleSeed} disabled={seedChart.isPending}>
+          <button type="button" className="add-button" onClick={handleSeed} disabled={seedChart.isPending}>
             {seedChart.isPending ? "Setting up..." : "Set up chart of accounts"}
           </button>
         </div>
@@ -245,7 +245,7 @@ function ChartView({ accounts, onSeed, seedPending }: { accounts: ChartAccount[]
     <>
       <div className="section-heading">
         <div><p className="eyebrow">Chart of accounts</p><h2>{accounts.length} accounts</h2></div>
-        <button className="add-button" onClick={onSeed} disabled={seedPending}>{seedPending ? "Seeding..." : "Seed missing accounts"}</button>
+        <button type="button" className="add-button" onClick={onSeed} disabled={seedPending}>{seedPending ? "Seeding..." : "Seed missing accounts"}</button>
       </div>
       <CreateAccountForm />
       <DataTable title="Accounts" columns={["Code", "Name", "Type", "Normal", "Flags"]}>
@@ -305,7 +305,7 @@ function CreateAccountForm() {
           <span><input type="checkbox" checked={isBank} onChange={(e) => setIsBank(e.target.checked)} style={{ width: "auto", marginRight: 8 }} /> Cash or bank account</span>
         </label>
       </div>
-      <div className="form-actions"><button className="button button-primary" disabled={createAccount.isPending}>Create account</button></div>
+      <div className="form-actions"><button type="submit" className="button button-primary" disabled={createAccount.isPending}>Create account</button></div>
     </form>
   );
 }
@@ -394,7 +394,7 @@ function ManualJournalForm({ accounts }: { accounts: ChartAccount[] }) {
       ))}
       <div className="form-actions">
         <button type="button" className="button button-secondary" onClick={() => setLines((current) => [...current, { accountId: "", debit: "", credit: "", description: "" }])}>Add line</button>
-        <button className="button button-primary" disabled={postJournal.isPending || Math.abs(totalDebit - totalCredit) >= 0.01}>Post journal</button>
+        <button type="submit" className="button button-primary" disabled={postJournal.isPending || Math.abs(totalDebit - totalCredit) >= 0.01}>Post journal</button>
       </div>
     </form>
   );
@@ -416,7 +416,7 @@ function TransactionsView({ accounts }: { accounts: ChartAccount[] }) {
     <>
       <div className="card" style={{ padding: 8, display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
         {(["invoice", "payment", "expense", "bill"] as const).map((item) => (
-          <button key={item} className={tab === item ? "add-button" : "button button-secondary"} onClick={() => setTab(item)}>
+          <button key={item} type="button" className={tab === item ? "add-button" : "button button-secondary"} onClick={() => setTab(item)}>
             {item[0].toUpperCase() + item.slice(1)}
           </button>
         ))}
@@ -684,7 +684,7 @@ function SupplierForm() {
         <label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Supplier name" required /></label>
         <label>Phone<input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" /></label>
       </div>
-      <div className="form-actions"><button className="button button-secondary" disabled={createSupplier.isPending}>Add supplier</button></div>
+      <div className="form-actions"><button type="submit" className="button button-secondary" disabled={createSupplier.isPending}>Add supplier</button></div>
     </form>
   );
 }
@@ -706,7 +706,7 @@ function AccountingForm({
     <form className="card create-form" style={{ padding: 18, marginBottom: 16 }} onSubmit={onSubmit}>
       <div className="section-heading" style={{ marginBottom: 0 }}><div><p className="eyebrow">Transaction</p><h2>{title}</h2></div></div>
       <div className="form-grid">{children}</div>
-      <div className="form-actions"><button className="button button-primary" disabled={pending}>{pending ? "Posting..." : submitLabel}</button></div>
+      <div className="form-actions"><button type="submit" className="button button-primary" disabled={pending}>{pending ? "Posting..." : submitLabel}</button></div>
     </form>
   );
 }

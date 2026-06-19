@@ -157,7 +157,7 @@ export default function Dashboard() {
           <section className="jobs-section">
             <div className="section-heading">
               <div><p className="eyebrow">Workshop jobs</p><h2>{jobs.data?.length ?? 0} job cards</h2></div>
-              <button className="add-button" onClick={() => setCreateModal("job")}>+ Create job</button>
+              <button type="button" className="add-button" onClick={() => setCreateModal("job")}>+ Create job</button>
             </div>
             <div className="job-grid">
               {(jobs.data ?? []).map((job) => (
@@ -188,7 +188,7 @@ export default function Dashboard() {
             <DataTable
               title={`${stock.data?.length ?? 0} inventory items`}
               columns={["Item", "Category", "Available", "Minimum", "Supplier"]}
-              action={<button className="add-button" onClick={() => setCreateModal("stock")}>+ Add stock</button>}
+              action={<button type="button" className="add-button" onClick={() => setCreateModal("stock")}>+ Add stock</button>}
             >
               {(stock.data ?? []).map((item) => (
                 <tr key={item.id}>
@@ -208,8 +208,8 @@ export default function Dashboard() {
               columns={["Date", "Type", "Quantity", "Reason", "By"]}
               action={
                 <>
-                  <button className="add-button" onClick={() => setCreateModal("stock")}>+ New movement</button>
-                  <button className="add-button" onClick={() => setSelectedStockId(null)} style={{marginLeft: "8px"}}>
+                  <button type="button" className="add-button" onClick={() => setCreateModal("stock")}>+ New movement</button>
+                  <button type="button" className="add-button" onClick={() => setSelectedStockId(null)} style={{marginLeft: "8px"}}>
                     All stocks
                   </button>
                 </>
@@ -231,7 +231,7 @@ export default function Dashboard() {
           {createModal === "stock" && <AddStockModal onClose={() => setCreateModal(null)} />}
           {createModal === "customer" && <AddCustomerModal onClose={() => setCreateModal(null)} />}
           {selectedStockId && createModal !== "stock" && (
-            <button className="add-button" onClick={() => setSelectedStockId(null)} style={{marginTop: "16px"}}>
+            <button type="button" className="add-button" onClick={() => setSelectedStockId(null)} style={{marginTop: "16px"}}>
               Back to stock list
             </button>
           )}
@@ -240,7 +240,7 @@ export default function Dashboard() {
           <DataTable
             title={`${customers.data?.length ?? 0} customers`}
             columns={["Customer", "Phone", "Location", "Added"]}
-            action={<button className="add-button" onClick={() => setCreateModal("customer")}>+ Add customer</button>}
+            action={<button type="button" className="add-button" onClick={() => setCreateModal("customer")}>+ Add customer</button>}
           >
             {(customers.data ?? []).map((customer) => (
               <tr key={customer.id}>

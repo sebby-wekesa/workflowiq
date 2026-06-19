@@ -43,88 +43,21 @@ async function fetchAppUser(authId: string): Promise<AppUser | null> {
   return (data as AppUser) ?? null;
 }
 
+async function fetchOrganization(orgId: string): Promise<Organization | null> {
+  const { data, error } = await supabase
+    .from("organizations")
+    .select("*")
+    .eq("id", orgId)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as Organization) ?? null;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Load persisted session from sessionStorage (for "remember me" behavior)
-  const [session, setSession] = useState<Session | null>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = sessionStorage.getItem('supabase:auth:session');
-        if (stored) {
-          const parsed = JSON.parse(stored) as Session;
-          // Only restore if the session hasn't expired yet
-          if (!parsed.expires_at || new Date() < new Date(parsed.expires_at)) {
-            return parsed;
-          }
-        }
-      } catch {
-        // Ignore parse errors
-      }
-    }
-    return null;
-  });
-
-  const [appUser, setAppUser] = useState<AppUser | null>(() => {
-    if (session?.user?.id) {
-      // Load app_user row that might already exist in the DB
-      (async () => {
-        try {
-          const storedAppUser = await fetchAppUser(session.user.id);
-          setAppUser(storedAppUser ?? null);
-        } catch {
-          // Ignore errors on initial load
-        }
-      })();
-    }
-    return null;
-  });
-
-  const [organization, setOrganization] = useState<Organization | null>(() => {
-    if (session?.user?.id) {
-      (async () => {
-        try {
-          const storedOrg = await fetchAppUser(session.user.id);
-          setOrganization(storedOrg?.org_id ? { id: storedOrg!.org_id } : null);
-        } catch {
-          // Ignore errors on initial load
-        }
-      })();
-    }
-    return null;
-  });
-
+  const [session, setSession] = useState<Session | null>(null);
+  const [appUser, setAppUser] = useState<AppUser | null>(null);
+  const [organization, setOrganization] = useState<Organization | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Auto-refresh Supabase session when the underlying Auth session changes
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_e, s) => {
-      setSession(s);
-      if (s?.user?.id) {
-        try {
-          const storedAppUser = await fetchAppUser(s.user.id);
-          setAppUser(storedAppUser);
-          setOrganization(storedAppUser?.org_id ? { id: storedAppUser.org_id } : null);
-        } catch {
-          // Ignore errors on auth state change
-        }
-      }
-    });
-    return () => sub.subscription.unsubscribe();
-  }, []);
-
-  // Persist session to sessionStorage whenever it changes
-  useEffect(() => {
-    if (session && typeof window !== 'undefined') {
-      try {
-        sessionStorage.setItem('supabase:auth:session', JSON.stringify({
-          ...session,
-          // Adjust the expiration timestamp to be relative to now
-          expires_at: session.expires_at ? new Date(session.expires_at).getTime() : null,
-        }));
-      } catch {
-        // Ignore write errors (e.g., quota exceeded)
-      }
-    }
-  }, [session]);
 
   const loadAppUser = async (authId: string | undefined) => {
     if (!authId) { setAppUser(null); setOrganization(null); return; }
@@ -135,16 +68,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setAppUser(row);
     if (row?.org_id) {
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('*')
-        .eq('id', row.org_id)
-        .maybeSingle();
-      setOrganization((org as Organization) ?? null);
+      setOrganization(await fetchOrganization(row.org_id));
     } else {
       setOrganization(null);
     }
   };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const syncSession = async (nextSession: Session | null) => {
+      if (!mounted) return;
+      setSession(nextSession);
+      try {
+        await loadAppUser(nextSession?.user.id);
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+
+    void supabase.auth
+      .getSession()
+      .then(({ data }) => syncSession(data.session))
+      .catch(() => {
+        if (mounted) setIsLoading(false);
+      });
+
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_e, s) => {
+      await syncSession(s);
+    });
+
+    return () => {
+      mounted = false;
+      sub.subscription.unsubscribe();
+    };
+  }, []);
 
   const value: AuthContextValue = {
     user: session?.user ?? null,
