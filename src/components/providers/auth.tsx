@@ -44,15 +44,90 @@ async function fetchAppUser(authId: string): Promise<AppUser | null> {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [appUser, setAppUser] = useState<AppUser | null>(null);
-  const [organization, setOrganization] = useState<Organization | null>(null);
+  // Load persisted session from sessionStorage (for "remember me" behavior)
+  const [session, setSession] = useState<Session | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = sessionStorage.getItem('supabase:auth:session');
+        if (stored) {
+          const parsed = JSON.parse(stored) as Session;
+          // Only restore if the session hasn't expired yet
+          if (!parsed.expires_at || new Date() < new Date(parsed.expires_at)) {
+            return parsed;
+          }
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    }
+    return null;
+  });
+
+  const [appUser, setAppUser] = useState<AppUser | null>(() => {
+    if (session?.user?.id) {
+      // Load app_user row that might already exist in the DB
+      (async () => {
+        try {
+          const storedAppUser = await fetchAppUser(session.user.id);
+          setAppUser(storedAppUser ?? null);
+        } catch {
+          // Ignore errors on initial load
+        }
+      })();
+    }
+    return null;
+  });
+
+  const [organization, setOrganization] = useState<Organization | null>(() => {
+    if (session?.user?.id) {
+      (async () => {
+        try {
+          const storedOrg = await fetchAppUser(session.user.id);
+          setOrganization(storedOrg?.org_id ? { id: storedOrg!.org_id } : null);
+        } catch {
+          // Ignore errors on initial load
+        }
+      })();
+    }
+    return null;
+  });
+
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    // Auto-refresh Supabase session when the underlying Auth session changes
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_e, s) => {
+      setSession(s);
+      if (s?.user?.id) {
+        try {
+          const storedAppUser = await fetchAppUser(s.user.id);
+          setAppUser(storedAppUser);
+          setOrganization(storedAppUser?.org_id ? { id: storedAppUser.org_id } : null);
+        } catch {
+          // Ignore errors on auth state change
+        }
+      }
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  // Persist session to sessionStorage whenever it changes
+  useEffect(() => {
+    if (session && typeof window !== 'undefined') {
+      try {
+        sessionStorage.setItem('supabase:auth:session', JSON.stringify({
+          ...session,
+          // Adjust the expiration timestamp to be relative to now
+          expires_at: session.expires_at ? new Date(session.expires_at).getTime() : null,
+        }));
+      } catch {
+        // Ignore write errors (e.g., quota exceeded)
+      }
+    }
+  }, [session]);
 
   const loadAppUser = async (authId: string | undefined) => {
     if (!authId) { setAppUser(null); setOrganization(null); return; }
-    // The DB trigger links/creates the app_users row (and a new org for a
-    // brand-new signup) on first login. Poll briefly until it commits.
     let row = await fetchAppUser(authId);
     for (let i = 0; i < 4 && !row; i++) {
       await new Promise((r) => setTimeout(r, 400));
@@ -61,26 +136,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAppUser(row);
     if (row?.org_id) {
       const { data: org } = await supabase
-        .from("organizations").select("*").eq("id", row.org_id).maybeSingle();
+        .from('organizations')
+        .select('*')
+        .eq('id', row.org_id)
+        .maybeSingle();
       setOrganization((org as Organization) ?? null);
     } else {
       setOrganization(null);
     }
   };
-
-  useEffect(() => {
-    supabase.auth.getSession().then(async ({ data }) => {
-      setSession(data.session);
-      await loadAppUser(data.session?.user.id);
-      setIsLoading(false);
-    });
-
-    const { data: sub } = supabase.auth.onAuthStateChange(async (_e, s) => {
-      setSession(s);
-      await loadAppUser(s?.user.id);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, []);
 
   const value: AuthContextValue = {
     user: session?.user ?? null,
