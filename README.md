@@ -44,6 +44,9 @@ Supabase and setting `VITE_ENABLE_GOOGLE_AUTH=true`.
 See [docs/MIGRATION_GUIDE.md](docs/MIGRATION_GUIDE.md) for the supplied backend
 migration details.
 
+See [docs/SOP.md](docs/SOP.md) for the standard operating procedure covering
+daily operations, deployment checks, access control, and incident response.
+
 ## Deploy to Vercel
 
 Use the default Vite settings:
