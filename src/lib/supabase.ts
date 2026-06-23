@@ -1,6 +1,7 @@
 // src/lib/supabase.ts
 // Single Supabase client for the whole app. Reads keys from Vite env vars.
 import { createClient } from "@supabase/supabase-js";
+import type { Classification, StatementGroup } from "@/lib/accounting/classifications";
 
 const url = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
 const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
@@ -112,6 +113,12 @@ export interface ChartAccount {
   name: string;
   type: AccountType;
   normal_balance: NormalBalance;
+  classification: Classification | null;
+  statement_group: StatementGroup | null;
+  currency: string;
+  parent_id: string | null;
+  note: string | null;
+  vat_applicable: boolean;
   is_bank: boolean;
   is_system: boolean;
   is_active: boolean;

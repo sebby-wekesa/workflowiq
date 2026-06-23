@@ -21,6 +21,12 @@ import {
   type AccountingPayment, type ChartAccount, type JournalEntry, type LedgerLine,
   type Supplier,
 } from "@/lib/supabase";
+import {
+  CLASSIFICATION_MAP,
+  STATEMENT_GROUPS,
+  type Classification,
+  type StatementGroup,
+} from "@/lib/accounting/classifications";
 
 function unwrap<T>(res: { data: T | null; error: { message: string } | null }): T {
   if (res.error) throw new Error(res.error.message);
@@ -386,6 +392,33 @@ export type PartyLedgerRow = {
   outstanding: number;
 };
 
+export type AccountTreeAccount = {
+  id: string;
+  code: string;
+  name: string;
+  type: ChartAccount["type"];
+  classification: Classification | null;
+  classificationLabel: string;
+  currency: string;
+  vatApplicable: boolean;
+  parentId: string | null;
+  balance: number;
+};
+
+export type AccountTreeGroup = {
+  key: StatementGroup;
+  label: string;
+  statement: "BALANCE_SHEET" | "INCOME_STATEMENT";
+  accounts: AccountTreeAccount[];
+  total: number;
+};
+
+export type ParentAccountOption = {
+  id: string;
+  code: string;
+  name: string;
+};
+
 type PostedEntry = JournalEntry & {
   ledger_line?: LedgerLine[];
 };
@@ -432,6 +465,26 @@ function aggregateLines(entries: PostedEntry[]) {
   return totals;
 }
 
+function accountStatementGroup(account: ChartAccount): StatementGroup {
+  if (account.statement_group) return account.statement_group;
+  if (account.classification && CLASSIFICATION_MAP[account.classification]) {
+    return CLASSIFICATION_MAP[account.classification].group;
+  }
+
+  const code = account.code || "";
+  if (account.type === "ASSET") return code.startsWith("15") ? "NON_CURRENT_ASSETS" : "CURRENT_ASSETS";
+  if (account.type === "LIABILITY") return code.startsWith("23") ? "NON_CURRENT_LIABILITIES" : "CURRENT_LIABILITIES";
+  if (account.type === "EQUITY") return "EQUITY";
+  if (account.type === "INCOME") return code === "4000" ? "REVENUE" : "OTHER_INCOME";
+  if (account.type === "EXPENSE") {
+    if (code === "5000") return "COST_OF_GOODS_SOLD";
+    if (code === "5400") return "FINANCE_CHARGES";
+    return "ADMINISTRATIVE_EXPENSES";
+  }
+
+  return "CURRENT_ASSETS";
+}
+
 export const accountingApi = {
   seedChart: () => supabase.rpc("seed_chart_of_accounts").then(unwrap<{ success: boolean; created: number; total: number }>),
   listAccounts: () =>
@@ -460,6 +513,28 @@ export const accountingApi = {
       .single()
       .then(unwrap<{ id: string }>);
   },
+  createClassifiedAccount: (input: {
+    name: string;
+    currency?: string;
+    classification: Classification;
+    statementGroup?: StatementGroup | null;
+    parentId?: string | null;
+    description?: string | null;
+    note?: string | null;
+    vatApplicable?: boolean;
+  }) =>
+    supabase
+      .rpc("create_classified_account", {
+        p_name: input.name,
+        p_currency: input.currency ?? "KES",
+        p_classification: input.classification,
+        p_statement_group: input.statementGroup ?? null,
+        p_parent_id: input.parentId ?? null,
+        p_description: input.description ?? null,
+        p_note: input.note ?? null,
+        p_vat_applicable: input.vatApplicable ?? false,
+      })
+      .then(unwrap<{ success: boolean; account_id: string; accountId: string; code: string }>),
   updateAccount: (input: { id: string; name?: string; isActive?: boolean; isBank?: boolean }) =>
     supabase
       .from("chart_account")
@@ -482,6 +557,56 @@ export const accountingApi = {
       })
       .then(unwrap<{ success?: boolean; entry_number: string; entryNumber: string }>),
   listJournalEntries: () => postedEntries(),
+  getAccountTree: async (): Promise<AccountTreeGroup[]> => {
+    const [accounts, entries] = await Promise.all([
+      accountingApi.listActiveAccounts(),
+      postedEntries(),
+    ]);
+    const totals = aggregateLines(entries);
+    const byGroup = new Map<StatementGroup, AccountTreeAccount[]>();
+
+    for (const account of accounts) {
+      const group = accountStatementGroup(account);
+      const sum = totals.get(account.id) ?? { debit: 0, credit: 0 };
+      const net = sum.debit - sum.credit;
+      const balance = account.normal_balance === "DEBIT" ? net : -net;
+      const classificationLabel = account.classification
+        ? CLASSIFICATION_MAP[account.classification]?.label ?? account.classification
+        : account.type;
+      const rows = byGroup.get(group) ?? [];
+
+      rows.push({
+        id: account.id,
+        code: account.code,
+        name: account.name,
+        type: account.type,
+        classification: account.classification,
+        classificationLabel,
+        currency: account.currency ?? "KES",
+        vatApplicable: Boolean(account.vat_applicable),
+        parentId: account.parent_id,
+        balance: r2(balance),
+      });
+      byGroup.set(group, rows);
+    }
+
+    return STATEMENT_GROUPS.map((group) => {
+      const accountsInGroup = byGroup.get(group.key) ?? [];
+      return {
+        ...group,
+        accounts: accountsInGroup,
+        total: r2(accountsInGroup.reduce((sum, account) => sum + account.balance, 0)),
+      };
+    });
+  },
+  getParentAccountOptions: async (): Promise<ParentAccountOption[]> => {
+    const accounts = await accountingApi.listActiveAccounts();
+    return accounts.map((account) => ({
+      id: account.id,
+      code: account.code,
+      name: account.name,
+    }));
+  },
   listSuppliers: () =>
     supabase.from("suppliers").select("*").order("name").then(unwrap<Supplier[]>),
   createSupplier: (input: { name: string; phone?: string; email?: string; location?: string; notes?: string }) =>
@@ -852,21 +977,26 @@ export const useAccountingExpenses = () =>
   useQuery({ queryKey: ["accounting", "expenses"], queryFn: async () => accountingApi.listExpenses() });
 export const useAccountingPayments = () =>
   useQuery({ queryKey: ["accounting", "payments"], queryFn: async () => accountingApi.listPayments() });
-export const useTrialBalance = (asOf?: string) =>
-  useQuery({ queryKey: ["accounting", "trial-balance", asOf], queryFn: () => accountingApi.getTrialBalance(asOf) });
+export const useAccountTree = (enabled = true) =>
+  useQuery({ queryKey: ["accounting", "account-tree"], queryFn: async () => accountingApi.getAccountTree(), enabled });
+export const useParentAccountOptions = (enabled = true) =>
+  useQuery({ queryKey: ["accounting", "parent-account-options"], queryFn: async () => accountingApi.getParentAccountOptions(), enabled });
+export const useTrialBalance = (asOf?: string, enabled = true) =>
+  useQuery({ queryKey: ["accounting", "trial-balance", asOf], queryFn: () => accountingApi.getTrialBalance(asOf), enabled });
 export const useGeneralLedger = (input: { accountId?: string; from?: string; to?: string }) =>
   useQuery({ queryKey: ["accounting", "ledger", input], queryFn: () => accountingApi.getGeneralLedger(input) });
-export const useProfitAndLoss = (input?: { from?: string; to?: string }) =>
-  useQuery({ queryKey: ["accounting", "profit-loss", input], queryFn: () => accountingApi.getProfitAndLoss(input) });
-export const useBalanceSheet = (asOf?: string) =>
-  useQuery({ queryKey: ["accounting", "balance-sheet", asOf], queryFn: () => accountingApi.getBalanceSheet(asOf) });
-export const useCustomerLedger = () =>
-  useQuery({ queryKey: ["accounting", "customer-ledger"], queryFn: async () => accountingApi.getCustomerLedger() });
-export const useSupplierLedger = () =>
-  useQuery({ queryKey: ["accounting", "supplier-ledger"], queryFn: async () => accountingApi.getSupplierLedger() });
+export const useProfitAndLoss = (input?: { from?: string; to?: string }, enabled = true) =>
+  useQuery({ queryKey: ["accounting", "profit-loss", input], queryFn: () => accountingApi.getProfitAndLoss(input), enabled });
+export const useBalanceSheet = (asOf?: string, enabled = true) =>
+  useQuery({ queryKey: ["accounting", "balance-sheet", asOf], queryFn: () => accountingApi.getBalanceSheet(asOf), enabled });
+export const useCustomerLedger = (enabled = true) =>
+  useQuery({ queryKey: ["accounting", "customer-ledger"], queryFn: async () => accountingApi.getCustomerLedger(), enabled });
+export const useSupplierLedger = (enabled = true) =>
+  useQuery({ queryKey: ["accounting", "supplier-ledger"], queryFn: async () => accountingApi.getSupplierLedger(), enabled });
 
 export const useSeedChartOfAccounts = accountingMutation<void, { success: boolean; created: number; total: number }>(() => accountingApi.seedChart());
 export const useCreateAccountingAccount = accountingMutation(accountingApi.createAccount);
+export const useCreateClassifiedAccount = accountingMutation(accountingApi.createClassifiedAccount);
 export const useUpdateAccountingAccount = accountingMutation(accountingApi.updateAccount);
 export const usePostJournal = accountingMutation(accountingApi.postJournal);
 export const useCreateSupplier = accountingMutation(accountingApi.createSupplier);

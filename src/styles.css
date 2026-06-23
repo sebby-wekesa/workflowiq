@@ -205,6 +205,32 @@ td small { display: block; max-width: 270px; overflow: hidden; margin-top: 3px; 
 .danger-text { color: #b25e4b; font-weight: 800; }
 .error-banner { margin-bottom: 16px; padding: 14px; border: 1px solid #eccfc8; border-radius: 10px; background: #fbefec; color: #9a4e3e; font-size: 12px; }
 .panel-state { min-height: 300px; }
+.account-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.account-tools .button { min-height: 35px; font-size: 11px; }
+.account-tree { display: grid; gap: 8px; }
+.account-tree-section { margin: 18px 0 2px 2px; color: #72867f; font-size: 10px; font-weight: 850; letter-spacing: 1px; text-transform: uppercase; }
+.account-tree-group { overflow: hidden; }
+.account-tree-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 12px 14px; }
+.account-tree-toggle { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 7px; color: #6b8179; }
+.account-tree-toggle:hover { background: #eef4ef; color: #243d35; }
+.account-tree-title { min-width: 0; display: grid; gap: 3px; text-align: left; }
+.account-tree-title strong { overflow: hidden; color: #243d35; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.account-tree-title span { color: #8c9d98; font-size: 10px; font-weight: 700; }
+.account-tree-total { color: #213630; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 800; white-space: nowrap; }
+.account-tree-add,
+.account-report-link { min-height: 35px; white-space: nowrap; }
+.account-report-link { padding: 0 10px; font-size: 10px; }
+.account-tree-panel { border-top: 1px solid #edf1ee; }
+.account-tree-panel th:first-child,
+.account-tree-panel td:first-child { padding-left: 42px; }
+.account-tree-empty { padding: 14px 16px 16px 42px; color: #7f918c; font-size: 12px; }
+.account-code { display: inline; margin-right: 8px; color: #81928d; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+.account-balance { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; white-space: nowrap; }
+.account-add-form { padding: 16px; border-top: 1px solid #edf1ee; background: #f8faf8; }
+.account-add-form-heading { color: #40544f; font-size: 12px; font-weight: 750; }
+.account-add-form-heading strong { color: #17352e; }
+.account-checkbox { display: flex !important; grid-template-columns: none !important; align-items: center; gap: 8px !important; width: fit-content; }
+.account-checkbox input { width: auto; }
 .modal-backdrop { position: fixed; z-index: 10; inset: 0; display: grid; place-items: center; overflow-y: auto; padding: 24px; background: rgba(10, 27, 23, .58); backdrop-filter: blur(3px); }
 .modal { width: min(100%, 590px); max-height: calc(100vh - 48px); overflow-y: auto; padding: 24px; border: 1px solid #dce6df; border-radius: 18px; background: #fff; box-shadow: 0 30px 80px rgba(11, 36, 29, .25); }
 .modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 22px; }
@@ -246,6 +272,11 @@ td small { display: block; max-width: 270px; overflow: hidden; margin-top: 3px; 
   .metric { min-height: 115px; padding: 15px; }
   .metric strong { font-size: 30px; }
   td, th { padding-left: 14px; padding-right: 14px; white-space: nowrap; }
+  .account-tree-row { grid-template-columns: auto minmax(0, 1fr); }
+  .account-tree-total { grid-column: 2; }
+  .account-tree-add { grid-column: 1 / -1; width: 100%; }
+  .account-tree-panel th:first-child,
+  .account-tree-panel td:first-child { padding-left: 14px; }
   .job-grid { grid-template-columns: 1fr; }
   .modal-backdrop { align-items: end; padding: 12px; }
   .modal { max-height: calc(100vh - 24px); padding: 20px; border-radius: 16px; }

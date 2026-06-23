@@ -1,16 +1,17 @@
 import { useState, type ComponentType, type FormEvent, type ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
   BookOpenIcon,
   FileTextIcon,
-  LandmarkIcon,
   LineChartIcon,
   ListChecksIcon,
   ReceiptTextIcon,
 } from "lucide-react";
+import { AccountTree } from "@/components/accounting/AccountTree";
 import { useAuth } from "@/components/providers/auth";
 import {
+  useAccountTree,
   useAccountingAccounts,
   useAccountingBills,
   useAccountingEntries,
@@ -19,10 +20,11 @@ import {
   useAccountingPayments,
   useAccountingSuppliers,
   useBalanceSheet,
-  useCreateAccountingAccount,
   useCreateSupplier,
   useCustomers,
   useCustomerLedger,
+  useGeneralLedger,
+  useParentAccountOptions,
   usePostBill,
   usePostExpense,
   usePostInvoice,
@@ -33,26 +35,29 @@ import {
   useSupplierLedger,
   useTrialBalance,
 } from "@/lib/api";
+import type { AccountTreeGroup, ParentAccountOption } from "@/lib/api";
 import type { ChartAccount, Customer, Supplier } from "@/lib/supabase";
 
-type View = "overview" | "chart" | "journal" | "transactions" | "ledgers" | "reports";
+type View = "overview" | "chart" | "journal" | "transactions" | "ledger" | "ledgers" | "reports";
 
 const navItems: { view: View; label: string; href: string; icon: ComponentType<{ className?: string }> }[] = [
-  { view: "overview", label: "Overview", href: "/accounting", icon: LandmarkIcon },
+  { view: "chart", label: "Account Tree", href: "/accounting", icon: ListChecksIcon },
   { view: "transactions", label: "Transactions", href: "/accounting/transactions", icon: ReceiptTextIcon },
   { view: "journal", label: "Journal", href: "/accounting/journal", icon: BookOpenIcon },
-  { view: "chart", label: "Chart", href: "/accounting/chart", icon: ListChecksIcon },
+  { view: "ledger", label: "General Ledger", href: "/accounting/ledger", icon: FileTextIcon },
   { view: "ledgers", label: "Ledgers", href: "/accounting/ledgers", icon: FileTextIcon },
   { view: "reports", label: "Reports", href: "/accounting/reports", icon: LineChartIcon },
 ];
 
 function viewFromPath(pathname: string): View {
+  if (pathname.includes("/overview")) return "overview";
   if (pathname.includes("/chart")) return "chart";
-  if (pathname.includes("/journal") || pathname.includes("/ledger")) return "journal";
   if (pathname.includes("/transactions") || pathname.includes("/invoices") || pathname.includes("/payments") || pathname.includes("/expenses")) return "transactions";
   if (pathname.includes("/ledgers") || pathname.includes("/debtors") || pathname.includes("/creditors")) return "ledgers";
+  if (pathname.includes("/ledger")) return "ledger";
+  if (pathname.includes("/journal")) return "journal";
   if (pathname.includes("/reports") || pathname.includes("/trial-balance") || pathname.includes("/profit-loss") || pathname.includes("/balance-sheet")) return "reports";
-  return "overview";
+  return "chart";
 }
 
 function money(value: number) {
@@ -80,16 +85,25 @@ export default function AccountingPage() {
   const view = viewFromPath(pathname);
 
   const accounts = useAccountingAccounts();
-  const trial = useTrialBalance();
-  const pl = useProfitAndLoss();
-  const balance = useBalanceSheet();
-  const customerLedger = useCustomerLedger();
-  const supplierLedger = useSupplierLedger();
+  const accountTree = useAccountTree(view === "chart");
+  const parentOptions = useParentAccountOptions(view === "chart");
+  const overviewView = view === "overview";
+  const trial = useTrialBalance(undefined, overviewView);
+  const pl = useProfitAndLoss(undefined, overviewView);
+  const balance = useBalanceSheet(undefined, overviewView);
+  const customerLedger = useCustomerLedger(overviewView);
+  const supplierLedger = useSupplierLedger(overviewView);
   const seedChart = useSeedChartOfAccounts();
 
   const hasAccounts = (accounts.data?.length ?? 0) > 0;
-  const isLoading = accounts.isLoading || trial.isLoading || pl.isLoading || balance.isLoading;
-  const error = accounts.error || trial.error || pl.error || balance.error;
+  const isLoading =
+    accounts.isLoading ||
+    (view === "chart" && (accountTree.isLoading || parentOptions.isLoading)) ||
+    (overviewView && (trial.isLoading || pl.isLoading || balance.isLoading));
+  const error =
+    accounts.error ||
+    (view === "chart" ? accountTree.error || parentOptions.error : null) ||
+    (overviewView ? trial.error || pl.error || balance.error : null);
 
   const handleSeed = async () => {
     try {
@@ -124,7 +138,7 @@ export default function AccountingPage() {
           <p className="eyebrow">First run</p>
           <h2 style={{ margin: "0 0 8px" }}>Set up the chart of accounts</h2>
           <p style={{ margin: "0 0 18px", color: "#657c76", fontSize: 13 }}>
-            Seed the standard accounts before posting invoices, expenses, payments, or manual journals.
+            Seed the standard accounts, or expand any heading below and add accounts manually.
           </p>
           <button type="button" className="add-button" onClick={handleSeed} disabled={seedChart.isPending}>
             {seedChart.isPending ? "Setting up..." : "Set up chart of accounts"}
@@ -132,6 +146,14 @@ export default function AccountingPage() {
         </div>
       )}
 
+      {!isLoading && !error && view === "chart" && (
+        <ChartView
+          groups={accountTree.data ?? []}
+          parents={parentOptions.data ?? []}
+          onSeed={handleSeed}
+          seedPending={seedChart.isPending}
+        />
+      )}
       {!isLoading && !error && hasAccounts && view === "overview" && (
         <Overview
           totalDebit={trial.data?.totalDebit ?? 0}
@@ -142,15 +164,13 @@ export default function AccountingPage() {
           payables={supplierLedger.data?.totalOutstanding ?? 0}
         />
       )}
-      {!isLoading && !error && hasAccounts && view === "chart" && (
-        <ChartView accounts={accounts.data ?? []} onSeed={handleSeed} seedPending={seedChart.isPending} />
-      )}
       {!isLoading && !error && hasAccounts && view === "journal" && (
         <JournalView accounts={accounts.data ?? []} />
       )}
       {!isLoading && !error && hasAccounts && view === "transactions" && (
         <TransactionsView accounts={accounts.data ?? []} />
       )}
+      {!isLoading && !error && hasAccounts && view === "ledger" && <GeneralLedgerView />}
       {!isLoading && !error && hasAccounts && view === "ledgers" && <LedgersView />}
       {!isLoading && !error && hasAccounts && view === "reports" && <ReportsView />}
     </div>
@@ -159,7 +179,7 @@ export default function AccountingPage() {
 
 function AccountingNav({ view }: { view: View }) {
   return (
-    <div className="card" style={{ padding: 8, display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 16 }}>
+    <div className="account-tools">
       {navItems.map((item) => (
         <Link
           key={item.view}
@@ -240,73 +260,32 @@ function Metric({ label, value, detail, tone }: { label: string; value: string; 
   );
 }
 
-function ChartView({ accounts, onSeed, seedPending }: { accounts: ChartAccount[]; onSeed: () => void; seedPending: boolean }) {
+function ChartView({
+  groups,
+  parents,
+  onSeed,
+  seedPending,
+}: {
+  groups: AccountTreeGroup[];
+  parents: ParentAccountOption[];
+  onSeed: () => void;
+  seedPending: boolean;
+}) {
+  const accountCount = groups.reduce((sum, group) => sum + group.accounts.length, 0);
+
   return (
     <>
       <div className="section-heading">
-        <div><p className="eyebrow">Chart of accounts</p><h2>{accounts.length} accounts</h2></div>
-        <button type="button" className="add-button" onClick={onSeed} disabled={seedPending}>{seedPending ? "Seeding..." : "Seed missing accounts"}</button>
+        <div>
+          <p className="eyebrow">Chart of accounts</p>
+          <h2>{accountCount} accounts in statement structure</h2>
+        </div>
+        <button type="button" className="add-button" onClick={onSeed} disabled={seedPending}>
+          {seedPending ? "Loading..." : "Load standard accounts"}
+        </button>
       </div>
-      <CreateAccountForm />
-      <DataTable title="Accounts" columns={["Code", "Name", "Type", "Normal", "Flags"]}>
-        {accounts.map((account) => (
-          <tr key={account.id}>
-            <td><strong>{account.code}</strong></td>
-            <td>{account.name}</td>
-            <td>{account.type}</td>
-            <td>{account.normal_balance}</td>
-            <td>
-              {account.is_system && <span className="status">System</span>}{" "}
-              {account.is_bank && <span className="status status-done">Bank</span>}{" "}
-              {!account.is_active && <span className="status status-collected">Inactive</span>}
-            </td>
-          </tr>
-        ))}
-      </DataTable>
+      <AccountTree groups={groups} parents={parents} />
     </>
-  );
-}
-
-function CreateAccountForm() {
-  const createAccount = useCreateAccountingAccount();
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
-  const [type, setType] = useState<ChartAccount["type"]>("EXPENSE");
-  const [isBank, setIsBank] = useState(false);
-
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    try {
-      await createAccount.mutateAsync({ code, name, type, isBank });
-      toast.success("Account created");
-      setCode("");
-      setName("");
-      setIsBank(false);
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not create account");
-    }
-  };
-
-  return (
-    <form className="card create-form" style={{ padding: 18, marginBottom: 16 }} onSubmit={submit}>
-      <div className="form-grid">
-        <label>Code<input value={code} onChange={(e) => setCode(e.target.value)} placeholder="5900" required /></label>
-        <label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="Cleaning supplies" required /></label>
-        <label>Type
-          <select value={type} onChange={(e) => setType(e.target.value as ChartAccount["type"])}>
-            <option value="ASSET">Asset</option>
-            <option value="LIABILITY">Liability</option>
-            <option value="EQUITY">Equity</option>
-            <option value="INCOME">Income</option>
-            <option value="EXPENSE">Expense</option>
-          </select>
-        </label>
-        <label style={{ alignContent: "end" }}>
-          <span><input type="checkbox" checked={isBank} onChange={(e) => setIsBank(e.target.checked)} style={{ width: "auto", marginRight: 8 }} /> Cash or bank account</span>
-        </label>
-      </div>
-      <div className="form-actions"><button type="submit" className="button button-primary" disabled={createAccount.isPending}>Create account</button></div>
-    </form>
   );
 }
 
@@ -746,6 +725,74 @@ function VatCheckbox({ checked, setChecked }: { checked: boolean; setChecked: (v
   );
 }
 
+function GeneralLedgerView() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const accountId = searchParams.get("account") ?? "";
+  const ledger = useGeneralLedger({ accountId: accountId || undefined });
+
+  const setAccountId = (nextAccountId: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextAccountId) next.set("account", nextAccountId);
+    else next.delete("account");
+    setSearchParams(next);
+  };
+
+  return (
+    <>
+      <form className="card create-form" style={{ padding: 18, marginBottom: 16 }}>
+        <div className="section-heading" style={{ marginBottom: 0 }}>
+          <div>
+            <p className="eyebrow">General ledger</p>
+            <h2>{ledger.data?.account?.name ?? "Account report"}</h2>
+          </div>
+          {ledger.data?.account && (
+            <span className="status">
+              Opening {money(ledger.data.openingBalance)}
+            </span>
+          )}
+        </div>
+        <div className="form-grid">
+          <label>
+            Account
+            <select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+              <option value="">Select account</option>
+              {(ledger.data?.accounts ?? []).map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.code} - {account.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </form>
+
+      {ledger.error && <div className="error-banner">Could not load ledger: {ledger.error.message}</div>}
+      {ledger.isLoading && <div className="panel-state"><div className="loader" />Loading ledger...</div>}
+
+      {!ledger.isLoading && !ledger.error && (
+        <DataTable title="Account entries" columns={["Date", "Entry", "Memo", "Source", "Debit", "Credit", "Balance"]}>
+          {(ledger.data?.lines ?? []).map((line, index) => (
+            <tr key={`${line.entryNumber}-${index}`}>
+              <td>{new Date(line.date).toLocaleDateString()}</td>
+              <td><strong>{line.entryNumber}</strong><small>{line.description ?? ""}</small></td>
+              <td>{line.memo ?? "-"}</td>
+              <td>{line.source}</td>
+              <td>{money(line.debit)}</td>
+              <td>{money(line.credit)}</td>
+              <td>{money(line.balance)}</td>
+            </tr>
+          ))}
+          {(ledger.data?.lines ?? []).length === 0 && (
+            <tr>
+              <td colSpan={7}>{accountId ? "No posted entries for this account yet." : "Select an account to view its ledger."}</td>
+            </tr>
+          )}
+        </DataTable>
+      )}
+    </>
+  );
+}
+
 function LedgersView() {
   const customers = useCustomerLedger();
   const suppliers = useSupplierLedger();
@@ -772,6 +819,11 @@ function ReportsView() {
   const trial = useTrialBalance();
   const pl = useProfitAndLoss();
   const balance = useBalanceSheet();
+  const isLoading = trial.isLoading || pl.isLoading || balance.isLoading;
+  const error = trial.error || pl.error || balance.error;
+
+  if (isLoading) return <div className="panel-state"><div className="loader" />Loading reports...</div>;
+  if (error) return <div className="error-banner">Could not load reports: {error.message}</div>;
 
   return (
     <>
