@@ -2,13 +2,11 @@ import { useState, type ComponentType, type FormEvent, type ReactNode } from "re
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  BookOpenIcon,
   FileTextIcon,
   HomeIcon,
   LineChartIcon,
   ListChecksIcon,
   PrinterIcon,
-  ReceiptTextIcon,
 } from "lucide-react";
 import { AccountTree } from "@/components/accounting/AccountTree";
 import { useAuth } from "@/components/providers/auth";
@@ -25,7 +23,6 @@ import {
   useBalanceSheet,
   useCreateSupplier,
   useCustomers,
-  useCustomerLedger,
   useGeneralLedger,
   useParentAccountOptions,
   usePostBill,
@@ -35,7 +32,6 @@ import {
   useProfitAndLoss,
   useRecordAccountingPayment,
   useSeedChartOfAccounts,
-  useSupplierLedger,
   useTrialBalance,
 } from "@/lib/api";
 import type {
@@ -53,11 +49,9 @@ type View = "home" | "chart" | "journal" | "transactions" | "ledger" | "ledgers"
 
 const navItems: { view: View; label: string; href: string; icon: ComponentType<{ className?: string }> }[] = [
   { view: "home", label: "Home", href: "/accounting", icon: HomeIcon },
-  { view: "chart", label: "Chart & Ledgers", href: "/accounting/chart", icon: ListChecksIcon },
-  { view: "transactions", label: "Transactions", href: "/accounting/transactions", icon: ReceiptTextIcon },
-  { view: "journal", label: "Journal", href: "/accounting/journal", icon: BookOpenIcon },
-  { view: "ledger", label: "Account Ledger", href: "/accounting/ledger", icon: FileTextIcon },
-  { view: "ledgers", label: "Party Ledgers", href: "/accounting/ledgers", icon: FileTextIcon },
+  { view: "chart", label: "Accountant", href: "/accounting/chart", icon: ListChecksIcon },
+  { view: "ledger", label: "General Ledger", href: "/accounting/ledger", icon: FileTextIcon },
+  { view: "ledgers", label: "Creditor/Debtors", href: "/accounting/creditors-debtors", icon: FileTextIcon },
   { view: "reports", label: "Reports", href: "/accounting/reports", icon: LineChartIcon },
 ];
 
@@ -849,7 +843,7 @@ function GeneralLedgerView() {
       <form className="card create-form" style={{ padding: 18, marginBottom: 16 }}>
         <div className="section-heading" style={{ marginBottom: 0 }}>
           <div>
-            <p className="eyebrow">T-account ledger</p>
+            <p className="eyebrow">General ledger</p>
             <h2>{ledger.data?.account ? `${ledger.data.account.code} - ${ledger.data.account.name}` : "Account report"}</h2>
           </div>
           {ledger.data?.account && (
@@ -985,21 +979,41 @@ function TAccountSide({
 }
 
 function LedgersView() {
-  const customers = useCustomerLedger();
-  const suppliers = useSupplierLedger();
+  const summary = useAccountingHomeSummary();
+
+  if (summary.isLoading) return <div className="panel-state"><div className="loader" />Loading debtor and creditor accounts...</div>;
+  if (summary.error) return <div className="error-banner">Could not load debtor and creditor accounts: {summary.error.message}</div>;
+
   return (
     <section className="dashboard-grid">
-      <LedgerTable title={`Customer ledger - ${money(customers.data?.totalOutstanding ?? 0)} outstanding`} rows={customers.data?.rows ?? []} empty="No customer balances yet." />
-      <LedgerTable title={`Supplier ledger - ${money(suppliers.data?.totalOutstanding ?? 0)} outstanding`} rows={suppliers.data?.rows ?? []} empty="No supplier balances yet." />
+      <AccountBalanceTable
+        title={`Debtors - ${money(summary.data?.debtors.total ?? 0)}`}
+        rows={summary.data?.debtors.rows ?? []}
+        empty="No debtor accounts from the accountant yet."
+      />
+      <AccountBalanceTable
+        title={`Creditors - ${money(summary.data?.creditors.total ?? 0)}`}
+        rows={summary.data?.creditors.rows ?? []}
+        empty="No creditor accounts from the accountant yet."
+      />
     </section>
   );
 }
 
-function LedgerTable({ title, rows, empty }: { title: string; rows: { id: string; name: string; billed: number; paid: number; outstanding: number }[]; empty: string }) {
+function AccountBalanceTable({ title, rows, empty }: { title: string; rows: AccountSummaryRow[]; empty: string }) {
   return (
-    <DataTable title={title} columns={["Party", "Billed", "Paid", "Outstanding"]}>
+    <DataTable title={title} columns={["Account", "Type", "Balance", "Ledger"]}>
       {rows.map((row) => (
-        <tr key={row.id}><td><strong>{row.name}</strong></td><td>{money(row.billed)}</td><td>{money(row.paid)}</td><td className={row.outstanding > 0 ? "danger-text" : ""}>{money(row.outstanding)}</td></tr>
+        <tr key={row.accountId}>
+          <td><strong>{row.code}</strong><small>{row.name}</small></td>
+          <td>{row.type}</td>
+          <td className="account-balance">{money(row.balance)}</td>
+          <td>
+            <Link to={`/accounting/ledger?account=${row.accountId}`} className="button button-secondary account-report-link">
+              Open
+            </Link>
+          </td>
+        </tr>
       ))}
       {rows.length === 0 && <tr><td colSpan={4}>{empty}</td></tr>}
     </DataTable>
