@@ -205,6 +205,10 @@ td small { display: block; max-width: 270px; overflow: hidden; margin-top: 3px; 
 .danger-text { color: #b25e4b; font-weight: 800; }
 .error-banner { margin-bottom: 16px; padding: 14px; border: 1px solid #eccfc8; border-radius: 10px; background: #fbefec; color: #9a4e3e; font-size: 12px; }
 .panel-state { min-height: 300px; }
+.debtor-creditor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 16px; margin-bottom: 16px; }
+.debtor-creditor-grid > .table-card { height: 100%; display: flex; flex-direction: column; margin-top: 0; }
+.debtor-creditor-grid .table-scroll { flex: 1; }
+.debtor-creditor-grid table { height: 100%; }
 .account-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
 .account-tools .button { min-height: 35px; font-size: 11px; }
 .account-tree { display: grid; gap: 8px; }
@@ -290,6 +294,7 @@ td small { display: block; max-width: 270px; overflow: hidden; margin-top: 3px; 
 @media (max-width: 1000px) {
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
   .dashboard-grid { grid-template-columns: 1fr; }
+  .debtor-creditor-grid { grid-template-columns: 1fr; }
   .accounting-home-grid { grid-template-columns: 1fr; }
   .job-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

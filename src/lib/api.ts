@@ -584,6 +584,18 @@ function isLoanAccount(account: ChartAccount) {
   return account.classification === "LOAN" || account.classification === "LONG_TERM_LIABILITY" || (account.type === "LIABILITY" && account.code.startsWith("23"));
 }
 
+async function generalLedgerSource(input?: { from?: string; to?: string }) {
+  const [accounts, entries] = await Promise.all([
+    accountingApi.listActiveAccounts(),
+    postedEntries(input),
+  ]);
+  return {
+    accounts,
+    entries,
+    totals: aggregateLines(entries),
+  };
+}
+
 export const accountingApi = {
   seedChart: () => supabase.rpc("seed_chart_of_accounts").then(unwrap<{ success: boolean; created: number; total: number }>),
   listAccounts: () =>
@@ -882,11 +894,7 @@ export const accountingApi = {
       p_notes: input.notes ?? null,
     }).then(unwrap<{ success: boolean; paymentNumber: string; entryNumber: string }>),
   getTrialBalance: async (asOf?: string) => {
-    const [accounts, entries] = await Promise.all([
-      accountingApi.listActiveAccounts(),
-      postedEntries(asOf ? { to: asOf } : undefined),
-    ]);
-    const totals = aggregateLines(entries);
+    const { accounts, totals } = await generalLedgerSource(asOf ? { to: asOf } : undefined);
     let totalDebit = 0;
     let totalCredit = 0;
     const rows: TrialBalanceRow[] = [];
@@ -918,7 +926,7 @@ export const accountingApi = {
     };
   },
   getGeneralLedger: async (input: { accountId?: string; from?: string; to?: string }) => {
-    const accounts = await accountingApi.listActiveAccounts();
+    const { accounts, entries: allEntries } = await generalLedgerSource({ to: input.to });
     if (!input.accountId) {
       return { accounts, account: null, openingBalance: 0, lines: [] as LedgerReportLine[] };
     }
@@ -926,7 +934,6 @@ export const accountingApi = {
     const account = accounts.find((a) => a.id === input.accountId) ?? null;
     if (!account) return { accounts, account: null, openingBalance: 0, lines: [] as LedgerReportLine[] };
 
-    const allEntries = await postedEntries({ to: input.to });
     let openingBalance = 0;
     const lines: LedgerReportLine[] = [];
 
@@ -959,11 +966,7 @@ export const accountingApi = {
     return { accounts, account, openingBalance: r2(openingBalance), lines };
   },
   getProfitAndLoss: async (input?: { from?: string; to?: string }): Promise<ProfitLossReport> => {
-    const [accounts, entries] = await Promise.all([
-      accountingApi.listActiveAccounts(),
-      postedEntries(input),
-    ]);
-    const totals = aggregateLines(entries);
+    const { accounts, totals } = await generalLedgerSource(input);
     const income: ProfitLossReport["income"] = [];
     const expenses: ProfitLossReport["expenses"] = [];
     let totalIncome = 0;
@@ -1003,11 +1006,7 @@ export const accountingApi = {
     };
   },
   getBalanceSheet: async (asOf?: string): Promise<BalanceSheetReport> => {
-    const [accounts, entries] = await Promise.all([
-      accountingApi.listActiveAccounts(),
-      postedEntries(asOf ? { to: asOf } : undefined),
-    ]);
-    const totals = aggregateLines(entries);
+    const { accounts, totals } = await generalLedgerSource(asOf ? { to: asOf } : undefined);
     const assets: BalanceSheetReport["assets"] = [];
     const liabilities: BalanceSheetReport["liabilities"] = [];
     const equity: BalanceSheetReport["equity"] = [];

@@ -985,7 +985,7 @@ function LedgersView() {
   if (summary.error) return <div className="error-banner">Could not load debtor and creditor accounts: {summary.error.message}</div>;
 
   return (
-    <section className="dashboard-grid">
+    <section className="debtor-creditor-grid">
       <AccountBalanceTable
         title={`Debtors - ${money(summary.data?.debtors.total ?? 0)}`}
         rows={summary.data?.debtors.rows ?? []}
