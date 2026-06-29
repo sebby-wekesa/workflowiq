@@ -245,3 +245,15 @@ export interface AccountingPayment {
   created_by: string | null;
   created_at: string;
 }
+
+export interface LoanRepayment {
+  id: string;
+  org_id: string;
+  loan_account_id: string;
+  due_date: string;
+  amount: number;
+  is_paid: boolean;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+}

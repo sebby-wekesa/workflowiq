@@ -19,7 +19,7 @@ import {
   type MovementType, type DeliveryCondition, type Material,
   type AccountingBill, type AccountingExpense, type AccountingInvoice,
   type AccountingPayment, type ChartAccount, type JournalEntry, type LedgerLine,
-  type Supplier,
+  type LoanRepayment, type Supplier,
 } from "@/lib/supabase";
 import {
   CLASSIFICATION_MAP,
@@ -392,6 +392,41 @@ export type PartyLedgerRow = {
   outstanding: number;
 };
 
+export type AccountSummaryRow = {
+  accountId: string;
+  code: string;
+  name: string;
+  type: ChartAccount["type"];
+  currency: string;
+  balance: number;
+};
+
+export type AccountSummaryBucket = {
+  rows: AccountSummaryRow[];
+  total: number;
+};
+
+export type CashAndBankSummary = {
+  bankRows: AccountSummaryRow[];
+  bankTotal: number;
+  cashRows: AccountSummaryRow[];
+  cashTotal: number;
+  grandTotal: number;
+};
+
+export type UpcomingLoanRepayment = LoanRepayment & {
+  loan_account: Pick<ChartAccount, "id" | "code" | "name" | "currency"> | null;
+};
+
+export type AccountingHomeSummary = {
+  cashbank: CashAndBankSummary;
+  loans: AccountSummaryBucket;
+  upcoming: UpcomingLoanRepayment[];
+  debtors: AccountSummaryBucket;
+  creditors: AccountSummaryBucket;
+  accruals: AccountSummaryBucket;
+};
+
 export type AccountTreeAccount = {
   id: string;
   code: string;
@@ -425,6 +460,16 @@ type PostedEntry = JournalEntry & {
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const num = (n: unknown) => Number(n ?? 0);
+
+function dateOnly(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function addDays(date: Date, days: number) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
+}
 
 function dateEnd(value: string) {
   return `${value}T23:59:59.999Z`;
@@ -483,6 +528,60 @@ function accountStatementGroup(account: ChartAccount): StatementGroup {
   }
 
   return "CURRENT_ASSETS";
+}
+
+function accountBalance(account: ChartAccount, totals: Map<string, { debit: number; credit: number }>) {
+  const sum = totals.get(account.id) ?? { debit: 0, credit: 0 };
+  const net = sum.debit - sum.credit;
+  return r2(account.normal_balance === "DEBIT" ? net : -net);
+}
+
+function accountSummaryRow(account: ChartAccount, totals: Map<string, { debit: number; credit: number }>): AccountSummaryRow {
+  return {
+    accountId: account.id,
+    code: account.code,
+    name: account.name,
+    type: account.type,
+    currency: account.currency ?? "KES",
+    balance: accountBalance(account, totals),
+  };
+}
+
+function accountSummaryBucket(
+  accounts: ChartAccount[],
+  totals: Map<string, { debit: number; credit: number }>,
+  predicate: (account: ChartAccount) => boolean,
+): AccountSummaryBucket {
+  const rows = accounts.filter(predicate).map((account) => accountSummaryRow(account, totals));
+  return {
+    rows,
+    total: r2(rows.reduce((sum, row) => sum + row.balance, 0)),
+  };
+}
+
+function isCashOrBankAccount(account: ChartAccount) {
+  return account.classification === "BANK" || account.is_bank || account.description === "key:cash_on_hand";
+}
+
+function isCashInHandAccount(account: ChartAccount) {
+  const name = account.name.toLowerCase();
+  return account.description === "key:cash_on_hand" || ((name.includes("cash") && !name.includes("bank")) || name.includes("petty"));
+}
+
+function isDebtorAccount(account: ChartAccount) {
+  return account.classification === "ACCOUNTS_RECEIVABLE" || account.description === "key:accounts_receivable";
+}
+
+function isCreditorAccount(account: ChartAccount) {
+  return account.classification === "ACCOUNTS_PAYABLE" || account.description === "key:accounts_payable";
+}
+
+function isAccrualAccount(account: ChartAccount) {
+  return account.classification === "OTHER_CURRENT_LIABILITY";
+}
+
+function isLoanAccount(account: ChartAccount) {
+  return account.classification === "LOAN" || account.classification === "LONG_TERM_LIABILITY" || (account.type === "LIABILITY" && account.code.startsWith("23"));
 }
 
 export const accountingApi = {
@@ -609,6 +708,58 @@ export const accountingApi = {
   },
   listSuppliers: () =>
     supabase.from("suppliers").select("*").order("name").then(unwrap<Supplier[]>),
+  listUpcomingLoanRepayments: async (withinDays = 30) => {
+    const today = dateOnly(new Date());
+    const horizon = dateOnly(addDays(new Date(), withinDays));
+    const res = await supabase
+      .from("loan_repayments")
+      .select("*, loan_account:chart_account(id, code, name, currency)")
+      .eq("is_paid", false)
+      .gte("due_date", today)
+      .lte("due_date", horizon)
+      .order("due_date");
+
+    if (res.error) {
+      const message = res.error.message.toLowerCase();
+      if (message.includes("loan_repayments") || message.includes("schema cache")) return [];
+      throw new Error(res.error.message);
+    }
+    return res.data as UpcomingLoanRepayment[];
+  },
+  getAccountingHomeSummary: async (): Promise<AccountingHomeSummary> => {
+    const [accounts, entries, upcoming] = await Promise.all([
+      accountingApi.listActiveAccounts(),
+      postedEntries(),
+      accountingApi.listUpcomingLoanRepayments(30),
+    ]);
+    const totals = aggregateLines(entries);
+    const bankRows: AccountSummaryRow[] = [];
+    const cashRows: AccountSummaryRow[] = [];
+
+    for (const account of accounts.filter(isCashOrBankAccount)) {
+      const row = accountSummaryRow(account, totals);
+      if (isCashInHandAccount(account)) cashRows.push(row);
+      else bankRows.push(row);
+    }
+
+    const bankTotal = r2(bankRows.reduce((sum, row) => sum + row.balance, 0));
+    const cashTotal = r2(cashRows.reduce((sum, row) => sum + row.balance, 0));
+
+    return {
+      cashbank: {
+        bankRows,
+        bankTotal,
+        cashRows,
+        cashTotal,
+        grandTotal: r2(bankTotal + cashTotal),
+      },
+      loans: accountSummaryBucket(accounts, totals, isLoanAccount),
+      upcoming,
+      debtors: accountSummaryBucket(accounts, totals, isDebtorAccount),
+      creditors: accountSummaryBucket(accounts, totals, isCreditorAccount),
+      accruals: accountSummaryBucket(accounts, totals, isAccrualAccount),
+    };
+  },
   createSupplier: (input: { name: string; phone?: string; email?: string; location?: string; notes?: string }) =>
     supabase
       .from("suppliers")
@@ -993,6 +1144,8 @@ export const useCustomerLedger = (enabled = true) =>
   useQuery({ queryKey: ["accounting", "customer-ledger"], queryFn: async () => accountingApi.getCustomerLedger(), enabled });
 export const useSupplierLedger = (enabled = true) =>
   useQuery({ queryKey: ["accounting", "supplier-ledger"], queryFn: async () => accountingApi.getSupplierLedger(), enabled });
+export const useAccountingHomeSummary = (enabled = true) =>
+  useQuery({ queryKey: ["accounting", "home-summary"], queryFn: async () => accountingApi.getAccountingHomeSummary(), enabled });
 
 export const useSeedChartOfAccounts = accountingMutation<void, { success: boolean; created: number; total: number }>(() => accountingApi.seedChart());
 export const useCreateAccountingAccount = accountingMutation(accountingApi.createAccount);

@@ -4,14 +4,17 @@ import { toast } from "sonner";
 import {
   BookOpenIcon,
   FileTextIcon,
+  HomeIcon,
   LineChartIcon,
   ListChecksIcon,
+  PrinterIcon,
   ReceiptTextIcon,
 } from "lucide-react";
 import { AccountTree } from "@/components/accounting/AccountTree";
 import { useAuth } from "@/components/providers/auth";
 import {
   useAccountTree,
+  useAccountingHomeSummary,
   useAccountingAccounts,
   useAccountingBills,
   useAccountingEntries,
@@ -35,29 +38,38 @@ import {
   useSupplierLedger,
   useTrialBalance,
 } from "@/lib/api";
-import type { AccountTreeGroup, ParentAccountOption } from "@/lib/api";
+import type {
+  AccountingHomeSummary,
+  AccountSummaryBucket,
+  AccountSummaryRow,
+  AccountTreeGroup,
+  CashAndBankSummary,
+  ParentAccountOption,
+  UpcomingLoanRepayment,
+} from "@/lib/api";
 import type { ChartAccount, Customer, Supplier } from "@/lib/supabase";
 
-type View = "overview" | "chart" | "journal" | "transactions" | "ledger" | "ledgers" | "reports";
+type View = "home" | "chart" | "journal" | "transactions" | "ledger" | "ledgers" | "reports";
 
 const navItems: { view: View; label: string; href: string; icon: ComponentType<{ className?: string }> }[] = [
-  { view: "chart", label: "Account Tree", href: "/accounting", icon: ListChecksIcon },
+  { view: "home", label: "Home", href: "/accounting", icon: HomeIcon },
+  { view: "chart", label: "Chart & Ledgers", href: "/accounting/chart", icon: ListChecksIcon },
   { view: "transactions", label: "Transactions", href: "/accounting/transactions", icon: ReceiptTextIcon },
   { view: "journal", label: "Journal", href: "/accounting/journal", icon: BookOpenIcon },
-  { view: "ledger", label: "General Ledger", href: "/accounting/ledger", icon: FileTextIcon },
-  { view: "ledgers", label: "Ledgers", href: "/accounting/ledgers", icon: FileTextIcon },
+  { view: "ledger", label: "Account Ledger", href: "/accounting/ledger", icon: FileTextIcon },
+  { view: "ledgers", label: "Party Ledgers", href: "/accounting/ledgers", icon: FileTextIcon },
   { view: "reports", label: "Reports", href: "/accounting/reports", icon: LineChartIcon },
 ];
 
 function viewFromPath(pathname: string): View {
-  if (pathname.includes("/overview")) return "overview";
-  if (pathname.includes("/chart")) return "chart";
+  if (pathname === "/accounting" || pathname === "/accounting/" || pathname.includes("/overview")) return "home";
+  if (pathname.includes("/chart") || pathname.includes("/setup")) return "chart";
   if (pathname.includes("/transactions") || pathname.includes("/invoices") || pathname.includes("/payments") || pathname.includes("/expenses")) return "transactions";
   if (pathname.includes("/ledgers") || pathname.includes("/debtors") || pathname.includes("/creditors")) return "ledgers";
   if (pathname.includes("/ledger")) return "ledger";
   if (pathname.includes("/journal")) return "journal";
   if (pathname.includes("/reports") || pathname.includes("/trial-balance") || pathname.includes("/profit-loss") || pathname.includes("/balance-sheet")) return "reports";
-  return "chart";
+  return "home";
 }
 
 function money(value: number) {
@@ -71,6 +83,25 @@ function money(value: number) {
 function localDate() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+}
+
+type LedgerPeriod = "all" | "month" | "year";
+
+function ledgerPeriodRange(period: LedgerPeriod) {
+  const now = new Date();
+  if (period === "month") {
+    return {
+      from: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`,
+      to: localDate(),
+    };
+  }
+  if (period === "year") {
+    return {
+      from: `${now.getFullYear()}-01-01`,
+      to: localDate(),
+    };
+  }
+  return {};
 }
 
 function parseAmount(value: string) {
@@ -87,23 +118,19 @@ export default function AccountingPage() {
   const accounts = useAccountingAccounts();
   const accountTree = useAccountTree(view === "chart");
   const parentOptions = useParentAccountOptions(view === "chart");
-  const overviewView = view === "overview";
-  const trial = useTrialBalance(undefined, overviewView);
-  const pl = useProfitAndLoss(undefined, overviewView);
-  const balance = useBalanceSheet(undefined, overviewView);
-  const customerLedger = useCustomerLedger(overviewView);
-  const supplierLedger = useSupplierLedger(overviewView);
+  const homeView = view === "home";
+  const homeSummary = useAccountingHomeSummary(homeView);
   const seedChart = useSeedChartOfAccounts();
 
   const hasAccounts = (accounts.data?.length ?? 0) > 0;
   const isLoading =
     accounts.isLoading ||
     (view === "chart" && (accountTree.isLoading || parentOptions.isLoading)) ||
-    (overviewView && (trial.isLoading || pl.isLoading || balance.isLoading));
+    (homeView && homeSummary.isLoading);
   const error =
     accounts.error ||
     (view === "chart" ? accountTree.error || parentOptions.error : null) ||
-    (overviewView ? trial.error || pl.error || balance.error : null);
+    (homeView ? homeSummary.error : null);
 
   const handleSeed = async () => {
     try {
@@ -154,15 +181,8 @@ export default function AccountingPage() {
           seedPending={seedChart.isPending}
         />
       )}
-      {!isLoading && !error && hasAccounts && view === "overview" && (
-        <Overview
-          totalDebit={trial.data?.totalDebit ?? 0}
-          totalCredit={trial.data?.totalCredit ?? 0}
-          netProfit={pl.data?.netProfit ?? 0}
-          totalAssets={balance.data?.totalAssets ?? 0}
-          receivables={customerLedger.data?.totalOutstanding ?? 0}
-          payables={supplierLedger.data?.totalOutstanding ?? 0}
-        />
+      {!isLoading && !error && hasAccounts && view === "home" && homeSummary.data && (
+        <AccountingHome summary={homeSummary.data} />
       )}
       {!isLoading && !error && hasAccounts && view === "journal" && (
         <JournalView accounts={accounts.data ?? []} />
@@ -195,49 +215,121 @@ function AccountingNav({ view }: { view: View }) {
   );
 }
 
-function Overview({
-  totalDebit,
-  totalCredit,
-  netProfit,
-  totalAssets,
-  receivables,
-  payables,
-}: {
-  totalDebit: number;
-  totalCredit: number;
-  netProfit: number;
-  totalAssets: number;
-  receivables: number;
-  payables: number;
-}) {
+function AccountingHome({ summary }: { summary: AccountingHomeSummary }) {
   return (
     <>
       <section className="metric-grid">
-        <Metric label="Trial balance" value={money(totalDebit)} detail={Math.abs(totalDebit - totalCredit) < 0.01 ? "Balanced" : "Out of balance"} tone="green" />
-        <Metric label="Net profit" value={money(netProfit)} detail="Current posted ledger" tone="blue" />
-        <Metric label="Assets" value={money(totalAssets)} detail="As of today" tone="orange" />
-        <Metric label="Receivables" value={money(receivables)} detail={`Payables ${money(payables)}`} tone="red" />
+        <Metric label="Cash & bank" value={money(summary.cashbank.grandTotal)} detail={`Bank ${money(summary.cashbank.bankTotal)}`} tone="green" />
+        <Metric label="Debtors" value={money(summary.debtors.total)} detail="Receipts due" tone="blue" />
+        <Metric label="Creditors" value={money(summary.creditors.total)} detail={`Accruals ${money(summary.accruals.total)}`} tone="red" />
+        <Metric label="Loans" value={money(summary.loans.total)} detail={`${summary.upcoming.length} due in 30 days`} tone="orange" />
       </section>
 
-      <section className="dashboard-grid">
-        <div className="card">
-          <div className="card-heading"><div><p className="eyebrow">Workflow</p><h2>Post daily activity</h2></div></div>
-          <div className="attention-list">
-            <LinkRow href="/accounting/transactions" title="Record transactions" text="Invoices, bills, expenses, and payments" />
-            <LinkRow href="/accounting/journal" title="Manual journal" text="Post balanced debit and credit lines" />
-            <LinkRow href="/accounting/reports" title="Financial reports" text="Trial balance, profit and loss, balance sheet" />
-          </div>
-        </div>
-        <div className="card">
-          <div className="card-heading"><div><p className="eyebrow">Controls</p><h2>Accounting setup</h2></div></div>
-          <div className="attention-list">
-            <LinkRow href="/accounting/chart" title="Chart of accounts" text="Manage ledger accounts and bank accounts" />
-            <LinkRow href="/accounting/ledgers" title="Customer and supplier ledgers" text="Track debtors and creditors" />
-          </div>
-        </div>
+      <section className="accounting-home-grid">
+        <CashBankPanel summary={summary.cashbank} />
+        <LoanPanel loans={summary.loans} upcoming={summary.upcoming} />
+        <SummaryPanel eyebrow="Debtors & receipts due" title="Debtors" total={summary.debtors.total} tone="green">
+          <BalanceRows rows={summary.debtors.rows} empty="No receivable accounts yet." />
+        </SummaryPanel>
+        <SummaryPanel eyebrow="Creditors & accruals" title="Creditors" total={summary.creditors.total} tone="red">
+          <BalanceRows rows={summary.creditors.rows} empty="No payable accounts yet." />
+          <BalanceRows rows={summary.accruals.rows} empty="No accrual accounts yet." badge="Accrual" />
+        </SummaryPanel>
       </section>
     </>
   );
+}
+
+function CashBankPanel({ summary }: { summary: CashAndBankSummary }) {
+  return (
+    <SummaryPanel eyebrow="Cash & bank balances" title="Cash & Bank" total={summary.grandTotal} tone="green">
+      <div className="accounting-home-split">
+        <div>
+          <span>At bank</span>
+          <strong>{money(summary.bankTotal)}</strong>
+        </div>
+        <div>
+          <span>Cash in hand</span>
+          <strong>{money(summary.cashTotal)}</strong>
+        </div>
+      </div>
+      <BalanceRows rows={summary.bankRows} empty="No bank accounts yet." />
+      <BalanceRows rows={summary.cashRows} empty="No cash-in-hand accounts yet." />
+    </SummaryPanel>
+  );
+}
+
+function LoanPanel({ loans, upcoming }: { loans: AccountSummaryBucket; upcoming: UpcomingLoanRepayment[] }) {
+  return (
+    <SummaryPanel eyebrow="Outstanding loans" title="Loans" total={loans.total} tone="amber">
+      <BalanceRows rows={loans.rows} empty="No loans outstanding." />
+      <div className="accounting-home-subhead">To prepare for</div>
+      {upcoming.length > 0 ? (
+        <div className="accounting-home-rows">
+          {upcoming.map((repayment) => (
+            <div className="accounting-home-row" key={repayment.id}>
+              <div>
+                <strong>{repayment.loan_account?.name ?? "Loan repayment"}</strong>
+                <small>{formatShortDate(repayment.due_date)}{repayment.note ? ` - ${repayment.note}` : ""}</small>
+              </div>
+              <span>{money(Number(repayment.amount))}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="accounting-home-empty">No repayments due in the next 30 days.</div>
+      )}
+    </SummaryPanel>
+  );
+}
+
+function SummaryPanel({
+  eyebrow,
+  title,
+  total,
+  tone,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  total: number;
+  tone: "green" | "red" | "amber";
+  children: ReactNode;
+}) {
+  return (
+    <div className={`card accounting-home-card accounting-home-card-${tone}`}>
+      <div className="card-heading">
+        <div>
+          <p className="eyebrow">{eyebrow}</p>
+          <h2>{title}</h2>
+        </div>
+      </div>
+      <div className="accounting-home-total">{money(total)}</div>
+      {children}
+    </div>
+  );
+}
+
+function BalanceRows({ rows, empty, badge }: { rows: AccountSummaryRow[]; empty: string; badge?: string }) {
+  if (rows.length === 0) return <div className="accounting-home-empty">{empty}</div>;
+  return (
+    <div className="accounting-home-rows">
+      {rows.map((row) => (
+        <div className="accounting-home-row" key={row.accountId}>
+          <div>
+            <strong><span>{row.code}</span>{row.name}</strong>
+            {badge && <small>{badge}</small>}
+          </div>
+          <span>{money(row.balance)}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function formatShortDate(value: string) {
+  const datePart = value.slice(0, 10);
+  return new Date(`${datePart}T00:00:00`).toLocaleDateString("en-KE", { day: "2-digit", month: "short" });
 }
 
 function LinkRow({ href, title, text }: { href: string; title: string; text: string }) {
@@ -728,7 +820,10 @@ function VatCheckbox({ checked, setChecked }: { checked: boolean; setChecked: (v
 function GeneralLedgerView() {
   const [searchParams, setSearchParams] = useSearchParams();
   const accountId = searchParams.get("account") ?? "";
-  const ledger = useGeneralLedger({ accountId: accountId || undefined });
+  const rawPeriod = searchParams.get("period");
+  const period: LedgerPeriod = rawPeriod === "month" || rawPeriod === "year" ? rawPeriod : "all";
+  const range = ledgerPeriodRange(period);
+  const ledger = useGeneralLedger({ accountId: accountId || undefined, ...range });
 
   const setAccountId = (nextAccountId: string) => {
     const next = new URLSearchParams(searchParams);
@@ -737,17 +832,29 @@ function GeneralLedgerView() {
     setSearchParams(next);
   };
 
+  const setPeriod = (nextPeriod: LedgerPeriod) => {
+    const next = new URLSearchParams(searchParams);
+    if (nextPeriod === "all") next.delete("period");
+    else next.set("period", nextPeriod);
+    setSearchParams(next);
+  };
+
+  const lines = ledger.data?.lines ?? [];
+  const debitTotal = lines.reduce((sum, line) => sum + line.debit, 0);
+  const creditTotal = lines.reduce((sum, line) => sum + line.credit, 0);
+  const closingBalance = lines.at(-1)?.balance ?? ledger.data?.openingBalance ?? 0;
+
   return (
     <>
       <form className="card create-form" style={{ padding: 18, marginBottom: 16 }}>
         <div className="section-heading" style={{ marginBottom: 0 }}>
           <div>
-            <p className="eyebrow">General ledger</p>
-            <h2>{ledger.data?.account?.name ?? "Account report"}</h2>
+            <p className="eyebrow">T-account ledger</p>
+            <h2>{ledger.data?.account ? `${ledger.data.account.code} - ${ledger.data.account.name}` : "Account report"}</h2>
           </div>
           {ledger.data?.account && (
             <span className="status">
-              Opening {money(ledger.data.openingBalance)}
+              Closing {money(closingBalance)}
             </span>
           )}
         </div>
@@ -763,33 +870,117 @@ function GeneralLedgerView() {
               ))}
             </select>
           </label>
+          <label>
+            Period
+            <select value={period} onChange={(event) => setPeriod(event.target.value as LedgerPeriod)}>
+              <option value="all">All time</option>
+              <option value="month">Current month</option>
+              <option value="year">Current year</option>
+            </select>
+          </label>
+        </div>
+        <div className="form-actions">
+          <button type="button" className="button button-secondary" onClick={() => window.print()} disabled={!ledger.data?.account}>
+            <PrinterIcon className="size-4" />
+            Print report
+          </button>
         </div>
       </form>
 
       {ledger.error && <div className="error-banner">Could not load ledger: {ledger.error.message}</div>}
       {ledger.isLoading && <div className="panel-state"><div className="loader" />Loading ledger...</div>}
 
-      {!ledger.isLoading && !ledger.error && (
-        <DataTable title="Account entries" columns={["Date", "Entry", "Memo", "Source", "Debit", "Credit", "Balance"]}>
-          {(ledger.data?.lines ?? []).map((line, index) => (
-            <tr key={`${line.entryNumber}-${index}`}>
-              <td>{new Date(line.date).toLocaleDateString()}</td>
-              <td><strong>{line.entryNumber}</strong><small>{line.description ?? ""}</small></td>
-              <td>{line.memo ?? "-"}</td>
-              <td>{line.source}</td>
-              <td>{money(line.debit)}</td>
-              <td>{money(line.credit)}</td>
-              <td>{money(line.balance)}</td>
-            </tr>
-          ))}
-          {(ledger.data?.lines ?? []).length === 0 && (
-            <tr>
-              <td colSpan={7}>{accountId ? "No posted entries for this account yet." : "Select an account to view its ledger."}</td>
-            </tr>
-          )}
-        </DataTable>
+      {!ledger.isLoading && !ledger.error && !ledger.data?.account && (
+        <div className="card account-ledger-empty">Select an account to view its T-account ledger.</div>
+      )}
+
+      {!ledger.isLoading && !ledger.error && ledger.data?.account && (
+        <TAccountReport
+          account={ledger.data.account}
+          lines={lines}
+          debitTotal={debitTotal}
+          creditTotal={creditTotal}
+          closingBalance={closingBalance}
+        />
       )}
     </>
+  );
+}
+
+function TAccountReport({
+  account,
+  lines,
+  debitTotal,
+  creditTotal,
+  closingBalance,
+}: {
+  account: ChartAccount;
+  lines: { date: string; entryNumber: string; memo: string | null; debit: number; credit: number; description: string | null; balance: number }[];
+  debitTotal: number;
+  creditTotal: number;
+  closingBalance: number;
+}) {
+  const debitLines = lines.filter((line) => line.debit > 0);
+  const creditLines = lines.filter((line) => line.credit > 0);
+
+  return (
+    <div className="card account-ledger-report">
+      <div className="account-ledger-heading">
+        <div>
+          <p className="eyebrow">Printable ledger</p>
+          <h2>{account.code} - {account.name}</h2>
+          <span>{account.type} · {account.classification ?? account.statement_group ?? "Unclassified"}</span>
+        </div>
+        <div className="account-ledger-closing">
+          <span>Closing balance</span>
+          <strong>{money(closingBalance)}</strong>
+        </div>
+      </div>
+
+      <div className="t-account-grid">
+        <TAccountSide title="Debit" lines={debitLines} amountKey="debit" total={debitTotal} empty="No debit entries." />
+        <TAccountSide title="Credit" lines={creditLines} amountKey="credit" total={creditTotal} empty="No credit entries." />
+      </div>
+    </div>
+  );
+}
+
+function TAccountSide({
+  title,
+  lines,
+  amountKey,
+  total,
+  empty,
+}: {
+  title: string;
+  lines: { date: string; entryNumber: string; memo: string | null; debit: number; credit: number; description: string | null; balance: number }[];
+  amountKey: "debit" | "credit";
+  total: number;
+  empty: string;
+}) {
+  return (
+    <div className="t-account-side">
+      <div className="t-account-title">{title}</div>
+      <div className="t-account-lines">
+        {lines.length > 0 ? (
+          lines.map((line, index) => (
+            <div className="t-account-line" key={`${line.entryNumber}-${amountKey}-${index}`}>
+              <div>
+                <strong>{formatShortDate(line.date)} {line.description || line.memo || line.entryNumber}</strong>
+                <small>{line.entryNumber}</small>
+              </div>
+              <span>{money(line[amountKey])}</span>
+            </div>
+          ))
+        ) : (
+          <div className="t-account-empty">{empty}</div>
+        )}
+      </div>
+      <div className="t-account-total">
+        <span>Total {title}s</span>
+        <strong>{money(total)}</strong>
+      </div>
+    </div>
   );
 }
 

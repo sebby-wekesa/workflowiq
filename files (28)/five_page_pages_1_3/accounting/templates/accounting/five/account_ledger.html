@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load humanize %}
+{% comment %}accounting/templates/accounting/five/account_ledger.html — T-account / POS report{% endcomment %}
+{% block content %}
+<style>
+  .tl{max-width:1000px;margin:0 auto;padding:8px}
+  .tl .back{display:inline-block;margin-bottom:12px;color:#1f6f43;text-decoration:none;font-weight:600;font-size:.85rem}
+  .tl h1{font-size:1.3rem;color:#16231d;margin:0}
+  .tl .meta{color:#6d7a72;font-size:.85rem;border-bottom:2px solid #16231d;padding-bottom:12px;margin-bottom:14px}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px}
+  .closing{background:#10261c;color:#eaf2ec;border-radius:10px;padding:10px 16px;display:inline-block}
+  .closing .lbl{font-size:.66rem;text-transform:uppercase;letter-spacing:1.3px;color:#9ec3ad}
+  .closing .amt{font-size:1.3rem;font-weight:700}
+  .printbtn{background:#1f6f43;color:#fff;border:none;border-radius:8px;padding:9px 16px;font-weight:600;font-size:.85rem;cursor:pointer;text-decoration:none}
+  /* T-account: two columns, debit | credit */
+  .taccount{display:grid;grid-template-columns:1fr 1fr;gap:0;border:1px solid #16231d;border-radius:10px;overflow:hidden}
+  .taccount .side{padding:0}
+  .taccount .side.debit{border-right:1px solid #16231d}
+  .taccount .sidehead{background:#16231d;color:#fff;text-align:center;padding:8px;font-weight:700;font-size:.8rem;text-transform:uppercase;letter-spacing:1px}
+  .tline{display:flex;justify-content:space-between;padding:7px 12px;border-bottom:1px solid #eef1ec;font-size:.85rem}
+  .tline .d{color:#33403a}.tline .a{font-variant-numeric:tabular-nums}
+  .tline.rev{opacity:.6;font-style:italic}
+  .ttotal{display:flex;justify-content:space-between;padding:9px 12px;font-weight:700;border-top:2px solid #16231d;font-variant-numeric:tabular-nums}
+  .tag{color:#6f9a82;font-size:.72rem}
+  @media print{ .back,.toolbar .printbtn{display:none} .tl{max-width:100%} }
+</style>
+<div class="tl">
+  <a class="back" href="{% url 'accounting:chart_ledgers' %}">← Chart of Accounts</a>
+  <h1>{{ account.code }} · {{ account.name }}</h1>
+  <div class="meta">{{ account.get_type_display }} · {{ account.subtype }}{% if account.currency != 'KES' %} · {{ account.currency }}{% endif %}</div>
+
+  <div class="toolbar">
+    <div class="closing"><span class="lbl">Closing Balance</span> &nbsp; <span class="amt">KES {{ closing|floatformat:0|intcomma }}</span></div>
+    <a class="printbtn" href="#" onclick="window.print();return false;">Print report</a>
+  </div>
+
+  <div class="taccount">
+    <div class="side debit">
+      <div class="sidehead">Debit</div>
+      {% for r in rows %}{% if r.debit %}
+        <div class="tline {% if r.reversed %}rev{% endif %}">
+          <span class="d">{{ r.date|date:"d/m/y" }} {{ r.description }}{% if r.job or r.truck %}<br><span class="tag">{% if r.truck %}{{ r.truck }}{% endif %} {{ r.job }}</span>{% endif %}</span>
+          <span class="a">{{ r.debit|floatformat:0|intcomma }}</span>
+        </div>
+      {% endif %}{% endfor %}
+      <div class="ttotal"><span>Total Debits</span><span>{{ debit_total|floatformat:0|intcomma }}</span></div>
+    </div>
+    <div class="side credit">
+      <div class="sidehead">Credit</div>
+      {% for r in rows %}{% if r.credit %}
+        <div class="tline {% if r.reversed %}rev{% endif %}">
+          <span class="d">{{ r.date|date:"d/m/y" }} {{ r.description }}{% if r.job or r.truck %}<br><span class="tag">{% if r.truck %}{{ r.truck }}{% endif %} {{ r.job }}</span>{% endif %}</span>
+          <span class="a">{{ r.credit|floatformat:0|intcomma }}</span>
+        </div>
+      {% endif %}{% endfor %}
+      <div class="ttotal"><span>Total Credits</span><span>{{ credit_total|floatformat:0|intcomma }}</span></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
