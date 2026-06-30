@@ -33,7 +33,7 @@ function exportDashboard(summary: ChartsDashboardSummary) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.href = url;
-  link.download = "charts-dashboard.xls";
+  link.download = "accountant-dashboard.xls";
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -42,14 +42,14 @@ export default function ChartsPage() {
   const { appUser, organization } = useAuth();
   const summary = useChartsDashboardSummary();
 
-  if (!appUser) return <div className="panel-state">Loading charts...</div>;
+  if (!appUser) return <div className="panel-state">Loading accountant...</div>;
 
   return (
     <div className="dashboard">
       <header className="dashboard-header">
         <div>
           <p className="eyebrow">{organization?.name ?? "Workshop"}</p>
-          <h1>Charts</h1>
+          <h1>Accountant</h1>
         </div>
         <div className="header-actions">
           <button type="button" className="button button-secondary" onClick={() => window.print()} disabled={!summary.data}>
@@ -63,8 +63,8 @@ export default function ChartsPage() {
         </div>
       </header>
 
-      {summary.error && <div className="error-banner">Could not load charts dashboard: {summary.error.message}</div>}
-      {summary.isLoading && <div className="panel-state"><div className="loader" />Loading charts dashboard...</div>}
+      {summary.error && <div className="error-banner">Could not load accountant dashboard: {summary.error.message}</div>}
+      {summary.isLoading && <div className="panel-state"><div className="loader" />Loading accountant dashboard...</div>}
 
       {!summary.isLoading && !summary.error && summary.data && (
         <>
@@ -112,7 +112,7 @@ export default function ChartsPage() {
           </section>
 
           <div className="charts-dashboard-actions">
-            <Link to="/accounting/chart" className="button button-primary">Open accounting charts</Link>
+            <Link to="/accounting/chart" className="button button-primary">Open accountant workspace</Link>
             <Link to="/accounting/reports" className="button button-secondary">Open reports</Link>
             <Link to="/accounting/ledger" className="button button-secondary">Open general ledger</Link>
           </div>

@@ -45,7 +45,7 @@ type View = "home" | "chart" | "journal" | "transactions" | "ledger" | "ledgers"
 
 const navItems: { view: View; label: string; href: string; icon: ComponentType<{ className?: string }> }[] = [
   { view: "home", label: "Home", href: "/accounting", icon: HomeIcon },
-  { view: "chart", label: "Charts", href: "/accounting/chart", icon: ListChecksIcon },
+  { view: "chart", label: "Accountant", href: "/accounting/chart", icon: ListChecksIcon },
   { view: "ledger", label: "General Ledger", href: "/accounting/ledger", icon: FileTextIcon },
   { view: "ledgers", label: "Creditor/Debtors", href: "/accounting/creditors-debtors", icon: FileTextIcon },
   { view: "reports", label: "Reports", href: "/accounting/reports", icon: LineChartIcon },
