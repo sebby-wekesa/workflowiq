@@ -480,10 +480,14 @@ function CashBookSection({
   reconciliations: { id: string; reconciliation_number: string; statement_date: string; statement_balance: number; system_balance: number; difference: number; status: string; cash_account?: { account_name: string } | null }[];
   ledgerAccounts: ChartAccount[];
 }) {
+  const [subCategory, setSubCategory] = useState<"bank" | "cash">("bank");
   const bankAccounts = accounts.filter((account) => account.account_kind === "bank");
   const cashAccounts = accounts.filter((account) => account.account_kind === "cash");
   const bankTotal = bankAccounts.reduce((sum, account) => sum + account.currentBalance, 0);
   const cashTotal = cashAccounts.reduce((sum, account) => sum + account.currentBalance, 0);
+  const selectedAccounts = subCategory === "bank" ? bankAccounts : cashAccounts;
+  const selectedTransactions = transactions.filter((transaction) => transaction.accountKind === subCategory);
+  const selectedTitle = subCategory === "bank" ? "Cash at Bank" : "Cash in Hand";
 
   return (
     <>
@@ -492,29 +496,50 @@ function CashBookSection({
         <MetricCard label="Total Cash in Hand" value={money(cashTotal)} tone={1} />
         <MetricCard label="Total Cash Book Balance" value={money(bankTotal + cashTotal)} tone={2} />
       </section>
+      <section className="cash-book-subcategories" aria-label="Cash Book subcategories">
+        <button
+          type="button"
+          className={subCategory === "bank" ? "cash-book-subcategory cash-book-subcategory-active" : "cash-book-subcategory"}
+          onClick={() => setSubCategory("bank")}
+        >
+          <span>Cash at Bank</span>
+          <strong>{money(bankTotal)}</strong>
+          <small>{bankAccounts.length} bank accounts</small>
+        </button>
+        <button
+          type="button"
+          className={subCategory === "cash" ? "cash-book-subcategory cash-book-subcategory-active" : "cash-book-subcategory"}
+          onClick={() => setSubCategory("cash")}
+        >
+          <span>Cash in Hand</span>
+          <strong>{money(cashTotal)}</strong>
+          <small>{cashAccounts.length} cash accounts</small>
+        </button>
+      </section>
       <section className="charts-two-column">
-        <CashAccountForm />
-        <CashTransactionForm accounts={accounts} ledgerAccounts={ledgerAccounts} />
-        <BankReconciliationForm accounts={bankAccounts} />
+        <CashAccountForm key={`account-${subCategory}`} kind={subCategory} />
+        <CashTransactionForm key={`transaction-${subCategory}`} kind={subCategory} accounts={selectedAccounts} ledgerAccounts={ledgerAccounts} />
+        {subCategory === "bank" && <BankReconciliationForm accounts={bankAccounts} />}
       </section>
       <section className="charts-account-ledger">
-        <AccountList title="Cash at Bank" accounts={bankAccounts} />
-        <AccountList title="Cash in Hand" accounts={cashAccounts} />
+        <AccountList title={selectedTitle} accounts={selectedAccounts} />
       </section>
-      <ExportableCashTransactions transactions={transactions} />
-      <ChartsTable title="Bank reconciliations" columns={["Number", "Account", "Statement date", "Statement", "System", "Difference", "Status"]}>
-        {reconciliations.map((row) => (
-          <tr key={row.id}>
-            <td><strong>{row.reconciliation_number}</strong></td>
-            <td>{row.cash_account?.account_name ?? "-"}</td>
-            <td>{shortDate(row.statement_date)}</td>
-            <td>{money(Number(row.statement_balance))}</td>
-            <td>{money(Number(row.system_balance))}</td>
-            <td>{money(Number(row.difference))}</td>
-            <td><span className="status">{row.status}</span></td>
-          </tr>
-        ))}
-      </ChartsTable>
+      <ExportableCashTransactions title={`${selectedTitle} transaction history`} filename={`${subCategory === "bank" ? "cash-at-bank" : "cash-in-hand"}-transactions`} transactions={selectedTransactions} />
+      {subCategory === "bank" && (
+        <ChartsTable title="Bank reconciliations" columns={["Number", "Account", "Statement date", "Statement", "System", "Difference", "Status"]}>
+          {reconciliations.map((row) => (
+            <tr key={row.id}>
+              <td><strong>{row.reconciliation_number}</strong></td>
+              <td>{row.cash_account?.account_name ?? "-"}</td>
+              <td>{shortDate(row.statement_date)}</td>
+              <td>{money(Number(row.statement_balance))}</td>
+              <td>{money(Number(row.system_balance))}</td>
+              <td>{money(Number(row.difference))}</td>
+              <td><span className="status">{row.status}</span></td>
+            </tr>
+          ))}
+        </ChartsTable>
+      )}
     </>
   );
 }
@@ -647,14 +672,14 @@ function ExpenseSection({
   );
 }
 
-function CashAccountForm() {
+function CashAccountForm({ kind }: { kind: "bank" | "cash" }) {
   const createAccount = useCreateCashBookAccount();
-  const [kind, setKind] = useState<"bank" | "cash">("bank");
   const [accountName, setAccountName] = useState("");
   const [bankName, setBankName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [branch, setBranch] = useState("");
   const [openingBalance, setOpeningBalance] = useState("0");
+  const label = kind === "bank" ? "Bank Account" : "Cash in Hand Account";
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -680,13 +705,7 @@ function CashAccountForm() {
   };
 
   return (
-    <FormCard title="Add Bank / Cash Account" onSubmit={submit} pending={createAccount.isPending} submitLabel="Save account">
-      <label>Account type
-        <select value={kind} onChange={(event) => setKind(event.target.value as "bank" | "cash")}>
-          <option value="bank">Cash at Bank</option>
-          <option value="cash">Cash in Hand</option>
-        </select>
-      </label>
+    <FormCard title={`Add ${label}`} onSubmit={submit} pending={createAccount.isPending} submitLabel="Save account">
       <label>Account name<input value={accountName} onChange={(event) => setAccountName(event.target.value)} required /></label>
       {kind === "bank" && (
         <>
@@ -700,15 +719,27 @@ function CashAccountForm() {
   );
 }
 
-function CashTransactionForm({ accounts, ledgerAccounts }: { accounts: CashBookAccount[]; ledgerAccounts: ChartAccount[] }) {
+function CashTransactionForm({
+  kind,
+  accounts,
+  ledgerAccounts,
+}: {
+  kind: "bank" | "cash";
+  accounts: CashBookAccount[];
+  ledgerAccounts: ChartAccount[];
+}) {
   const postTransaction = usePostCashBookTransaction();
+  const actionOptions = kind === "bank"
+    ? ["Receive Deposit", "Write Cheque", "Journal Entry - Debit Cash", "Journal Entry - Credit Cash"]
+    : ["Receive Deposit", "Cash Payment", "Journal Entry - Debit Cash", "Journal Entry - Credit Cash"];
   const [cashAccountId, setCashAccountId] = useState("");
   const [date, setDate] = useState(localDate());
-  const [action, setAction] = useState("Receive Deposit");
+  const [action, setAction] = useState(actionOptions[0]);
   const [offsetAccountId, setOffsetAccountId] = useState("");
   const [amount, setAmount] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
   const [description, setDescription] = useState("");
+  const label = kind === "bank" ? "Cash at Bank" : "Cash in Hand";
 
   const direction = action === "Receive Deposit" || action === "Journal Entry - Debit Cash" ? "debit_cash" : "credit_cash";
   const selected = accounts.find((account) => account.id === cashAccountId);
@@ -737,16 +768,12 @@ function CashTransactionForm({ accounts, ledgerAccounts }: { accounts: CashBookA
   };
 
   return (
-    <FormCard title="Cash Book Transaction" onSubmit={submit} pending={postTransaction.isPending} submitLabel="Post transaction">
+    <FormCard title={`${label} Transaction`} onSubmit={submit} pending={postTransaction.isPending} submitLabel="Post transaction">
       <label>Account<SelectCashAccount value={cashAccountId} setValue={setCashAccountId} accounts={accounts} /></label>
       <label>Date<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label>
       <label>Transaction type
         <select value={action} onChange={(event) => setAction(event.target.value)}>
-          <option>Receive Deposit</option>
-          <option>Write Cheque</option>
-          <option>Cash Payment</option>
-          <option>Journal Entry - Debit Cash</option>
-          <option>Journal Entry - Credit Cash</option>
+          {actionOptions.map((option) => <option key={option}>{option}</option>)}
         </select>
       </label>
       <label>Offset account<SelectAccount value={offsetAccountId} setValue={setOffsetAccountId} accounts={offsetOptions} /></label>
@@ -1085,12 +1112,20 @@ function AccountList({ title, accounts }: { title: string; accounts: CashBookAcc
   );
 }
 
-function ExportableCashTransactions({ transactions }: { transactions: CashBookTransactionRow[] }) {
+function ExportableCashTransactions({
+  title,
+  filename,
+  transactions,
+}: {
+  title?: string;
+  filename?: string;
+  transactions: CashBookTransactionRow[];
+}) {
   return (
     <div className="charts-table-wrap">
       <TableActions
-        title="Transaction history"
-        onExcel={() => exportRows("cash-book-transactions", transactions.map((transaction) => ({
+        title={title ?? "Transaction history"}
+        onExcel={() => exportRows(filename ?? "cash-book-transactions", transactions.map((transaction) => ({
           Date: shortDate(transaction.date),
           Reference: transaction.referenceNumber,
           Account: transaction.accountName,
