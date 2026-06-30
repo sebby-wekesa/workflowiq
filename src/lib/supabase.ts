@@ -184,6 +184,41 @@ export interface AccountingInvoice {
   vat_amount: number;
   total_amount: number;
   memo: string | null;
+  branch: string | null;
+  sales_person: string | null;
+  payment_terms: string | null;
+  notes: string | null;
+  journal_entry_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AccountingInvoiceLine {
+  id: string;
+  org_id: string;
+  invoice_id: string;
+  item: string;
+  quantity: number;
+  unit_price: number;
+  discount: number;
+  tax_rate: number;
+  tax_amount: number;
+  line_total: number;
+  created_at: string;
+}
+
+export interface AccountingCreditNote {
+  id: string;
+  org_id: string;
+  credit_note_number: string;
+  invoice_id: string | null;
+  customer_id: string;
+  branch: string | null;
+  reason: string;
+  date: string;
+  amount: number;
+  notes: string | null;
+  status: string;
   journal_entry_id: string | null;
   created_by: string | null;
   created_at: string;
@@ -243,6 +278,97 @@ export interface AccountingPayment {
   amount: number;
   reference: string | null;
   notes: string | null;
+  journal_entry_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AccountingCashAccount {
+  id: string;
+  org_id: string;
+  chart_account_id: string;
+  account_kind: "bank" | "cash";
+  account_name: string;
+  bank_name: string | null;
+  account_number: string | null;
+  branch: string | null;
+  opening_balance: number;
+  current_balance: number;
+  status: "active" | "inactive";
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AccountingCashTransaction {
+  id: string;
+  org_id: string;
+  cash_account_id: string;
+  transaction_number: string;
+  transaction_type: string;
+  date: string;
+  reference_number: string | null;
+  description: string | null;
+  offset_account_id: string | null;
+  debit: number;
+  credit: number;
+  running_balance: number;
+  journal_entry_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AccountingBankReconciliation {
+  id: string;
+  org_id: string;
+  cash_account_id: string;
+  reconciliation_number: string;
+  statement_date: string;
+  statement_balance: number;
+  system_balance: number;
+  difference: number;
+  status: "open" | "reconciled";
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AccountingCogsEntry {
+  id: string;
+  org_id: string;
+  cogs_number: string;
+  date: string;
+  branch: string | null;
+  invoice_id: string | null;
+  product_service: string | null;
+  project: string | null;
+  direct_material_cost: number;
+  direct_labour_cost: number;
+  production_service_cost: number;
+  purchase_cost: number;
+  total_amount: number;
+  payment_account_id: string | null;
+  status: string;
+  notes: string | null;
+  journal_entry_id: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface AccountingOperatingExpense {
+  id: string;
+  org_id: string;
+  expense_number: string;
+  expense_group: "administrative" | "finance" | "other_operating";
+  date: string;
+  payee: string;
+  branch: string | null;
+  description: string | null;
+  category: string;
+  amount: number;
+  payment_method: string;
+  reference_number: string | null;
+  payment_account_id: string | null;
+  status: string;
   journal_entry_id: string | null;
   created_by: string | null;
   created_at: string;

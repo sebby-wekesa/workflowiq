@@ -17,8 +17,10 @@ import {
   supabase, type Customer, type Stock, type Job, type AppUser, type Organization,
   type JobCondition, type JobPriority, type StockCategory,
   type MovementType, type DeliveryCondition, type Material,
-  type AccountingBill, type AccountingExpense, type AccountingInvoice,
-  type AccountingPayment, type ChartAccount, type JournalEntry, type LedgerLine,
+  type AccountingBankReconciliation, type AccountingBill, type AccountingCashAccount,
+  type AccountingCashTransaction, type AccountingCogsEntry, type AccountingCreditNote,
+  type AccountingExpense, type AccountingInvoice, type AccountingInvoiceLine,
+  type AccountingOperatingExpense, type AccountingPayment, type ChartAccount, type JournalEntry, type LedgerLine,
   type LoanRepayment, type Supplier,
 } from "@/lib/supabase";
 import {
@@ -427,6 +429,66 @@ export type AccountingHomeSummary = {
   accruals: AccountSummaryBucket;
 };
 
+export type CashBookAccount = AccountingCashAccount & {
+  chart_account: Pick<ChartAccount, "id" | "code" | "name" | "type" | "normal_balance" | "currency" | "is_active"> | null;
+  currentBalance: number;
+};
+
+export type CashBookTransactionRow = {
+  id: string;
+  cashAccountId: string;
+  accountName: string;
+  accountKind: "bank" | "cash";
+  date: string;
+  referenceNumber: string;
+  description: string;
+  transactionType: string;
+  debit: number;
+  credit: number;
+  runningBalance: number;
+  user: string;
+  journalEntryId: string;
+};
+
+export type BankReconciliationRow = AccountingBankReconciliation & {
+  cash_account?: Pick<AccountingCashAccount, "account_name" | "account_kind"> | null;
+};
+
+export type RevenueInvoice = AccountingInvoice & {
+  customer: Pick<Customer, "id" | "name" | "phone"> | null;
+  accounting_invoice_lines?: AccountingInvoiceLine[];
+};
+
+export type RevenueCreditNote = AccountingCreditNote & {
+  customer: Pick<Customer, "id" | "name" | "phone"> | null;
+  invoice?: Pick<AccountingInvoice, "id" | "invoice_number"> | null;
+};
+
+export type CogsEntryRow = AccountingCogsEntry & {
+  invoice?: Pick<AccountingInvoice, "id" | "invoice_number"> | null;
+};
+
+export type OperatingExpenseRow = AccountingOperatingExpense & {
+  payment_account?: Pick<ChartAccount, "id" | "code" | "name"> | null;
+};
+
+export type ChartsDashboardSummary = {
+  totalCashBookBalance: number;
+  totalRevenue: number;
+  totalCostOfGoodsSold: number;
+  grossProfit: number;
+  totalAdministrativeExpenses: number;
+  totalFinanceCharges: number;
+  totalOtherOperatingExpenses: number;
+  totalOperatingExpenses: number;
+  netProfitLoss: number;
+  outstandingInvoices: number;
+  paidInvoices: number;
+  overdueInvoices: number;
+  creditNotesIssued: number;
+  netRevenue: number;
+};
+
 export type AccountTreeAccount = {
   id: string;
   code: string;
@@ -786,6 +848,303 @@ export const accountingApi = {
       accruals: accountSummaryBucket(accounts, totals, (account) => isPostableAccount(account) && isAccrualAccount(account)),
     };
   },
+  listCashBookAccounts: async (): Promise<CashBookAccount[]> => {
+    const [rows, entries] = await Promise.all([
+      supabase
+        .from("accounting_cash_accounts")
+        .select("*, chart_account:chart_account(id, code, name, type, normal_balance, currency, is_active)")
+        .order("account_kind")
+        .order("account_name")
+        .then(unwrap<(AccountingCashAccount & {
+          chart_account: Pick<ChartAccount, "id" | "code" | "name" | "type" | "normal_balance" | "currency" | "is_active"> | null;
+        })[]>),
+      postedEntries(),
+    ]);
+    const totals = aggregateLines(entries);
+
+    return rows.map((row) => ({
+      ...row,
+      currentBalance: row.chart_account
+        ? accountBalance(row.chart_account as ChartAccount, totals)
+        : r2(num(row.current_balance)),
+    }));
+  },
+  listCashBookTransactions: async (): Promise<CashBookTransactionRow[]> => {
+    const [cashAccounts, entries, cashTransactions, users] = await Promise.all([
+      accountingApi.listCashBookAccounts(),
+      postedEntries(),
+      supabase
+        .from("accounting_cash_transactions")
+        .select("*")
+        .order("date", { ascending: true })
+        .then(unwrap<AccountingCashTransaction[]>),
+      supabase
+        .from("app_users")
+        .select("id, name")
+        .then(unwrap<Pick<AppUser, "id" | "name">[]>),
+    ]);
+    const accountByChartId = new Map(
+      cashAccounts
+        .filter((account) => account.chart_account)
+        .map((account) => [account.chart_account!.id, account]),
+    );
+    const transactionByEntryId = new Map(
+      cashTransactions
+        .filter((transaction) => transaction.journal_entry_id)
+        .map((transaction) => [transaction.journal_entry_id!, transaction]),
+    );
+    const userById = new Map(users.map((user) => [user.id, user.name ?? "Unknown"]));
+    const running = new Map(cashAccounts.map((account) => [account.id, num(account.opening_balance)]));
+    const rows: CashBookTransactionRow[] = [];
+
+    for (const entry of entries) {
+      for (const line of entry.ledger_line ?? []) {
+        const cashAccount = accountByChartId.get(line.account_id);
+        if (!cashAccount) continue;
+        const debit = num(line.debit);
+        const credit = num(line.credit);
+        const nextBalance = r2((running.get(cashAccount.id) ?? num(cashAccount.opening_balance)) + debit - credit);
+        running.set(cashAccount.id, nextBalance);
+        const cashTransaction = transactionByEntryId.get(entry.id);
+        rows.push({
+          id: cashTransaction?.id ?? line.id,
+          cashAccountId: cashAccount.id,
+          accountName: cashAccount.account_name,
+          accountKind: cashAccount.account_kind,
+          date: entry.date,
+          referenceNumber: cashTransaction?.reference_number ?? cashTransaction?.transaction_number ?? entry.entry_number,
+          description: cashTransaction?.description ?? line.description ?? entry.memo ?? "-",
+          transactionType: cashTransaction?.transaction_type ?? entry.source,
+          debit,
+          credit,
+          runningBalance: nextBalance,
+          user: userById.get(entry.posted_by ?? entry.created_by ?? "") ?? "Unknown",
+          journalEntryId: entry.id,
+        });
+      }
+    }
+
+    return rows.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  },
+  listBankReconciliations: () =>
+    supabase
+      .from("accounting_bank_reconciliations")
+      .select("*, cash_account:accounting_cash_accounts(account_name, account_kind)")
+      .order("statement_date", { ascending: false })
+      .then(unwrap<BankReconciliationRow[]>),
+  listRevenueInvoices: () =>
+    supabase
+      .from("accounting_invoices")
+      .select("*, customer:customers(id, name, phone), accounting_invoice_lines(*)")
+      .order("date", { ascending: false })
+      .then(unwrap<RevenueInvoice[]>),
+  listCreditNotes: () =>
+    supabase
+      .from("accounting_credit_notes")
+      .select("*, customer:customers(id, name, phone), invoice:accounting_invoices(id, invoice_number)")
+      .order("date", { ascending: false })
+      .then(unwrap<RevenueCreditNote[]>),
+  listCogsEntries: () =>
+    supabase
+      .from("accounting_cogs_entries")
+      .select("*, invoice:accounting_invoices(id, invoice_number)")
+      .order("date", { ascending: false })
+      .then(unwrap<CogsEntryRow[]>),
+  listOperatingExpenses: (group?: AccountingOperatingExpense["expense_group"]) => {
+    let q = supabase
+      .from("accounting_operating_expenses")
+      .select("*, payment_account:chart_account(id, code, name)")
+      .order("date", { ascending: false });
+    if (group) q = q.eq("expense_group", group);
+    return q.then(unwrap<OperatingExpenseRow[]>);
+  },
+  getChartsDashboardSummary: async (): Promise<ChartsDashboardSummary> => {
+    const [cashAccounts, invoices, creditNotes, cogsEntries, operatingExpenses] = await Promise.all([
+      accountingApi.listCashBookAccounts(),
+      accountingApi.listRevenueInvoices(),
+      accountingApi.listCreditNotes(),
+      accountingApi.listCogsEntries(),
+      accountingApi.listOperatingExpenses(),
+    ]);
+    const today = new Date(dateOnly(new Date()));
+    const approvedInvoices = invoices.filter((invoice) => invoice.status !== "void");
+    const totalRevenue = r2(approvedInvoices.reduce((sum, invoice) => sum + num(invoice.net_amount), 0));
+    const creditNotesIssued = r2(creditNotes.filter((note) => note.status !== "void").reduce((sum, note) => sum + num(note.amount), 0));
+    const totalCostOfGoodsSold = r2(cogsEntries.filter((entry) => entry.status !== "void").reduce((sum, entry) => sum + num(entry.total_amount), 0));
+    const groupTotal = (group: AccountingOperatingExpense["expense_group"]) =>
+      r2(operatingExpenses
+        .filter((expense) => expense.status !== "void" && expense.expense_group === group)
+        .reduce((sum, expense) => sum + num(expense.amount), 0));
+    const totalAdministrativeExpenses = groupTotal("administrative");
+    const totalFinanceCharges = groupTotal("finance");
+    const totalOtherOperatingExpenses = groupTotal("other_operating");
+    const totalOperatingExpenses = r2(totalAdministrativeExpenses + totalFinanceCharges + totalOtherOperatingExpenses);
+    const netRevenue = r2(totalRevenue - creditNotesIssued);
+    const grossProfit = r2(totalRevenue - totalCostOfGoodsSold);
+
+    return {
+      totalCashBookBalance: r2(cashAccounts.reduce((sum, account) => sum + account.currentBalance, 0)),
+      totalRevenue,
+      totalCostOfGoodsSold,
+      grossProfit,
+      totalAdministrativeExpenses,
+      totalFinanceCharges,
+      totalOtherOperatingExpenses,
+      totalOperatingExpenses,
+      netProfitLoss: r2(grossProfit - totalOperatingExpenses),
+      outstandingInvoices: r2(approvedInvoices.filter((invoice) => !["paid", "void"].includes(invoice.status)).reduce((sum, invoice) => sum + num(invoice.total_amount), 0)),
+      paidInvoices: r2(approvedInvoices.filter((invoice) => invoice.status === "paid").reduce((sum, invoice) => sum + num(invoice.total_amount), 0)),
+      overdueInvoices: r2(approvedInvoices
+        .filter((invoice) => invoice.due_date && invoice.status !== "paid" && new Date(invoice.due_date) < today)
+        .reduce((sum, invoice) => sum + num(invoice.total_amount), 0)),
+      creditNotesIssued,
+      netRevenue,
+    };
+  },
+  createCashBookAccount: (input: {
+    accountKind: "bank" | "cash";
+    accountName: string;
+    bankName?: string;
+    accountNumber?: string;
+    branch?: string;
+    openingBalance: number;
+    status?: "active" | "inactive";
+  }) =>
+    supabase.rpc("create_cash_book_account", {
+      p_account_kind: input.accountKind,
+      p_account_name: input.accountName,
+      p_bank_name: input.bankName ?? null,
+      p_account_number: input.accountNumber ?? null,
+      p_branch: input.branch ?? null,
+      p_opening_balance: input.openingBalance,
+      p_status: input.status ?? "active",
+    }).then(unwrap<{ success: boolean; cash_account_id: string; chart_account_id: string; code: string }>),
+  postCashBookTransaction: (input: {
+    cashAccountId: string;
+    date: string;
+    transactionType: string;
+    direction: "debit_cash" | "credit_cash";
+    amount: number;
+    offsetAccountId: string;
+    description?: string;
+    referenceNumber?: string;
+  }) =>
+    supabase.rpc("post_cash_book_transaction", {
+      p_cash_account_id: input.cashAccountId,
+      p_date: input.date,
+      p_transaction_type: input.transactionType,
+      p_direction: input.direction,
+      p_amount: input.amount,
+      p_offset_account_id: input.offsetAccountId,
+      p_description: input.description ?? null,
+      p_reference_number: input.referenceNumber ?? null,
+    }).then(unwrap<{ success: boolean; transactionNumber: string; entryNumber: string }>),
+  createBankReconciliation: (input: {
+    cashAccountId: string;
+    statementDate: string;
+    statementBalance: number;
+    notes?: string;
+  }) =>
+    supabase.rpc("create_bank_reconciliation", {
+      p_cash_account_id: input.cashAccountId,
+      p_statement_date: input.statementDate,
+      p_statement_balance: input.statementBalance,
+      p_notes: input.notes ?? null,
+    }).then(unwrap<{ success: boolean; reconciliation_number: string }>),
+  postCustomerInvoice: (input: {
+    customerId: string;
+    invoiceDate: string;
+    dueDate?: string | null;
+    branch?: string;
+    salesPerson?: string;
+    paymentTerms?: string;
+    notes?: string;
+    lines: { item: string; quantity: number; unitPrice: number; discount: number; tax: number }[];
+  }) =>
+    supabase.rpc("post_customer_invoice", {
+      p_customer_id: input.customerId,
+      p_invoice_date: input.invoiceDate,
+      p_due_date: input.dueDate ?? null,
+      p_branch: input.branch ?? null,
+      p_sales_person: input.salesPerson ?? null,
+      p_payment_terms: input.paymentTerms ?? null,
+      p_notes: input.notes ?? null,
+      p_lines: input.lines.map((line) => ({
+        item: line.item,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        discount: line.discount,
+        tax: line.tax,
+      })),
+    }).then(unwrap<{ success: boolean; invoiceNumber: string; entryNumber: string }>),
+  postCreditNote: (input: {
+    invoiceId?: string | null;
+    customerId: string;
+    branch?: string;
+    reason: string;
+    date: string;
+    amount: number;
+    notes?: string;
+  }) =>
+    supabase.rpc("post_credit_note", {
+      p_invoice_id: input.invoiceId ?? null,
+      p_customer_id: input.customerId,
+      p_branch: input.branch ?? null,
+      p_reason: input.reason,
+      p_date: input.date,
+      p_amount: input.amount,
+      p_notes: input.notes ?? null,
+    }).then(unwrap<{ success: boolean; creditNoteNumber: string; entryNumber: string }>),
+  postCogsEntry: (input: {
+    date: string;
+    branch?: string;
+    invoiceId?: string | null;
+    productService?: string;
+    project?: string;
+    directMaterialCost: number;
+    directLabourCost: number;
+    productionServiceCost: number;
+    purchaseCost: number;
+    paymentAccountId?: string | null;
+    notes?: string;
+  }) =>
+    supabase.rpc("post_cogs_entry", {
+      p_date: input.date,
+      p_branch: input.branch ?? null,
+      p_invoice_id: input.invoiceId ?? null,
+      p_product_service: input.productService ?? null,
+      p_project: input.project ?? null,
+      p_direct_material_cost: input.directMaterialCost,
+      p_direct_labour_cost: input.directLabourCost,
+      p_production_service_cost: input.productionServiceCost,
+      p_purchase_cost: input.purchaseCost,
+      p_payment_account_id: input.paymentAccountId ?? null,
+      p_notes: input.notes ?? null,
+    }).then(unwrap<{ success: boolean; cogsNumber: string; entryNumber: string }>),
+  postOperatingExpense: (input: {
+    expenseGroup: AccountingOperatingExpense["expense_group"];
+    date: string;
+    payee: string;
+    branch?: string;
+    description?: string;
+    category: string;
+    amount: number;
+    paymentMethod: string;
+    referenceNumber?: string;
+    paymentAccountId?: string | null;
+  }) =>
+    supabase.rpc("post_operating_expense", {
+      p_expense_group: input.expenseGroup,
+      p_date: input.date,
+      p_payee: input.payee,
+      p_branch: input.branch ?? null,
+      p_description: input.description ?? null,
+      p_category: input.category,
+      p_amount: input.amount,
+      p_payment_method: input.paymentMethod,
+      p_reference_number: input.referenceNumber ?? null,
+      p_payment_account_id: input.paymentAccountId ?? null,
+    }).then(unwrap<{ success: boolean; expenseNumber: string; entryNumber: string }>),
   createSupplier: (input: { name: string; phone?: string; email?: string; location?: string; notes?: string }) =>
     supabase
       .from("suppliers")
@@ -1159,6 +1518,22 @@ export const useSupplierLedger = (enabled = true) =>
   useQuery({ queryKey: ["accounting", "supplier-ledger"], queryFn: async () => accountingApi.getSupplierLedger(), enabled });
 export const useAccountingHomeSummary = (enabled = true) =>
   useQuery({ queryKey: ["accounting", "home-summary"], queryFn: async () => accountingApi.getAccountingHomeSummary(), enabled });
+export const useChartsDashboardSummary = () =>
+  useQuery({ queryKey: ["accounting", "charts", "summary"], queryFn: async () => accountingApi.getChartsDashboardSummary() });
+export const useCashBookAccounts = () =>
+  useQuery({ queryKey: ["accounting", "charts", "cash-accounts"], queryFn: async () => accountingApi.listCashBookAccounts() });
+export const useCashBookTransactions = () =>
+  useQuery({ queryKey: ["accounting", "charts", "cash-transactions"], queryFn: async () => accountingApi.listCashBookTransactions() });
+export const useBankReconciliations = () =>
+  useQuery({ queryKey: ["accounting", "charts", "bank-reconciliations"], queryFn: async () => accountingApi.listBankReconciliations() });
+export const useRevenueInvoices = () =>
+  useQuery({ queryKey: ["accounting", "charts", "revenue-invoices"], queryFn: async () => accountingApi.listRevenueInvoices() });
+export const useCreditNotes = () =>
+  useQuery({ queryKey: ["accounting", "charts", "credit-notes"], queryFn: async () => accountingApi.listCreditNotes() });
+export const useCogsEntries = () =>
+  useQuery({ queryKey: ["accounting", "charts", "cogs"], queryFn: async () => accountingApi.listCogsEntries() });
+export const useOperatingExpenses = (group?: AccountingOperatingExpense["expense_group"]) =>
+  useQuery({ queryKey: ["accounting", "charts", "operating-expenses", group ?? "all"], queryFn: async () => accountingApi.listOperatingExpenses(group) });
 
 export const useSeedChartOfAccounts = accountingMutation<void, SeedChartResult>(() => accountingApi.seedChart());
 export const useCreateAccountingAccount = accountingMutation(accountingApi.createAccount);
@@ -1170,3 +1545,10 @@ export const usePostInvoice = accountingMutation(accountingApi.postInvoice);
 export const usePostBill = accountingMutation(accountingApi.postBill);
 export const usePostExpense = accountingMutation(accountingApi.postExpense);
 export const useRecordAccountingPayment = accountingMutation(accountingApi.recordPayment);
+export const useCreateCashBookAccount = accountingMutation(accountingApi.createCashBookAccount);
+export const usePostCashBookTransaction = accountingMutation(accountingApi.postCashBookTransaction);
+export const useCreateBankReconciliation = accountingMutation(accountingApi.createBankReconciliation);
+export const usePostCustomerInvoice = accountingMutation(accountingApi.postCustomerInvoice);
+export const usePostCreditNote = accountingMutation(accountingApi.postCreditNote);
+export const usePostCogsEntry = accountingMutation(accountingApi.postCogsEntry);
+export const usePostOperatingExpense = accountingMutation(accountingApi.postOperatingExpense);

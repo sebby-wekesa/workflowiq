@@ -291,12 +291,61 @@ td small { display: block; max-width: 270px; overflow: hidden; margin-top: 3px; 
 .form-actions .button { min-width: 110px; padding: 0 15px; }
 .form-actions .button-primary { margin-top: 0; }
 
+.charts-module { display: grid; gap: 16px; }
+.charts-section-tabs { display: flex; flex-wrap: wrap; gap: 7px; padding: 7px; border: 1px solid #dce6df; border-radius: 13px; background: rgba(255,255,255,.78); }
+.charts-tab { min-height: 38px; display: inline-flex; align-items: center; gap: 8px; padding: 0 12px; border-radius: 8px; color: #526b63; font-size: 11px; font-weight: 800; line-height: 1.15; }
+.charts-tab span { min-width: 0; overflow-wrap: anywhere; }
+.charts-tab:hover { background: #f1f6f2; color: #1f3c34; }
+.charts-tab-active { background: #17352e; color: #fff; }
+.charts-filter-panel { display: grid; grid-template-columns: minmax(210px, 1.2fr) repeat(4, minmax(120px, .75fr)) minmax(150px, .9fr) minmax(150px, .9fr) minmax(120px, .7fr) minmax(120px, .7fr) auto; gap: 9px; align-items: end; padding: 12px; border: 1px solid #dce6df; border-radius: 13px; background: rgba(255,255,255,.78); }
+.charts-filter-panel label { display: grid; gap: 5px; color: #667d75; font-size: 9px; font-weight: 850; letter-spacing: .5px; text-transform: uppercase; }
+.charts-filter-panel input,
+.charts-filter-panel select { min-height: 36px; padding: 0 10px; font-size: 11px; text-transform: none; letter-spacing: 0; }
+.charts-search { position: relative; }
+.charts-search svg { position: absolute; left: 10px; bottom: 10px; color: #7f928c; }
+.charts-search input { padding-left: 32px; }
+.charts-report-actions,
+.charts-table-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.charts-table-actions { justify-content: space-between; margin-top: 16px; padding: 0 2px; }
+.charts-table-actions h2 { margin: 0; color: #213630; font-size: 18px; letter-spacing: -.5px; }
+.charts-table-actions > div { display: flex; gap: 8px; }
+.charts-metric { min-height: 118px; }
+.charts-metric strong { font-size: 25px; letter-spacing: -.8px; font-variant-numeric: tabular-nums; }
+.charts-metric-1::after { border-color: #dcecf3; }
+.charts-metric-2::after { border-color: #f3e7ce; }
+.charts-metric-3::after { border-color: #f1dcd7; }
+.charts-summary-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 13px; }
+.charts-two-column { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.charts-two-column > .charts-form-card:first-child { grid-row: span 2; }
+.charts-account-ledger { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.charts-account-list { overflow: hidden; min-height: 230px; }
+.charts-form-card { padding: 16px; margin: 0; }
+.charts-form-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.charts-form-heading .eyebrow { margin: 0; }
+.charts-form-heading span { padding: 5px 7px; border-radius: 6px; background: #e8f5d7; color: #5e812a; font-size: 8px; font-weight: 850; text-transform: uppercase; white-space: nowrap; }
+.charts-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.charts-form-wide { grid-column: 1 / -1; }
+.charts-lines { display: grid; gap: 10px; padding: 10px; border: 1px solid #e5ede8; border-radius: 10px; background: #f8faf8; }
+.charts-line-grid { display: grid; grid-template-columns: minmax(180px, 1.5fr) repeat(4, minmax(88px, .7fr)); gap: 8px; }
+.charts-line-grid label { font-size: 9px; }
+.charts-breakdown { overflow: hidden; min-height: 200px; }
+.charts-table-wrap { min-width: 0; }
+.charts-table-card { margin-top: 0; }
+.charts-table-card td,
+.charts-table-card th { white-space: nowrap; }
+
 @media (max-width: 1000px) {
   .metric-grid { grid-template-columns: repeat(2, 1fr); }
   .dashboard-grid { grid-template-columns: 1fr; }
   .debtor-creditor-grid { grid-template-columns: 1fr; }
   .accounting-home-grid { grid-template-columns: 1fr; }
   .job-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .charts-filter-panel { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .charts-summary-row,
+  .charts-two-column,
+  .charts-account-ledger { grid-template-columns: 1fr; }
+  .charts-two-column > .charts-form-card:first-child { grid-row: auto; }
+  .charts-line-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -333,6 +382,16 @@ td small { display: block; max-width: 270px; overflow: hidden; margin-top: 3px; 
   .modal { max-height: calc(100vh - 24px); padding: 20px; border-radius: 16px; }
   .form-grid { grid-template-columns: 1fr; }
   .form-actions .button { flex: 1; min-width: 0; }
+  .charts-section-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .charts-tab { justify-content: center; padding: 6px 8px; }
+  .charts-filter-panel,
+  .charts-form-grid,
+  .charts-line-grid { grid-template-columns: 1fr; }
+  .charts-table-actions { display: grid; gap: 10px; }
+  .charts-table-actions > div,
+  .charts-report-actions { justify-content: stretch; }
+  .charts-table-actions .button,
+  .charts-report-actions .button { flex: 1; }
 }
 
 @media print {
@@ -340,6 +399,10 @@ td small { display: block; max-width: 270px; overflow: hidden; margin-top: 3px; 
   .sidebar,
   .dashboard-header,
   .account-tools,
+  .charts-section-tabs,
+  .charts-filter-panel,
+  .charts-report-actions,
+  .charts-table-actions,
   .create-form,
   .app-sidebar,
   [data-sidebar] { display: none !important; }

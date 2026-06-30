@@ -8,10 +8,9 @@ import {
   ListChecksIcon,
   PrinterIcon,
 } from "lucide-react";
-import { AccountTree } from "@/components/accounting/AccountTree";
+import { ChartsAccountingModule } from "@/components/accounting/ChartsAccountingModule";
 import { useAuth } from "@/components/providers/auth";
 import {
-  useAccountTree,
   useAccountingHomeSummary,
   useAccountingAccounts,
   useAccountingBills,
@@ -24,7 +23,6 @@ import {
   useCreateSupplier,
   useCustomers,
   useGeneralLedger,
-  useParentAccountOptions,
   usePostBill,
   usePostExpense,
   usePostInvoice,
@@ -38,9 +36,7 @@ import type {
   AccountingHomeSummary,
   AccountSummaryBucket,
   AccountSummaryRow,
-  AccountTreeGroup,
   CashAndBankSummary,
-  ParentAccountOption,
   UpcomingLoanRepayment,
 } from "@/lib/api";
 import type { ChartAccount, Customer, Supplier } from "@/lib/supabase";
@@ -49,7 +45,7 @@ type View = "home" | "chart" | "journal" | "transactions" | "ledger" | "ledgers"
 
 const navItems: { view: View; label: string; href: string; icon: ComponentType<{ className?: string }> }[] = [
   { view: "home", label: "Home", href: "/accounting", icon: HomeIcon },
-  { view: "chart", label: "Accountant", href: "/accounting/chart", icon: ListChecksIcon },
+  { view: "chart", label: "Charts", href: "/accounting/chart", icon: ListChecksIcon },
   { view: "ledger", label: "General Ledger", href: "/accounting/ledger", icon: FileTextIcon },
   { view: "ledgers", label: "Creditor/Debtors", href: "/accounting/creditors-debtors", icon: FileTextIcon },
   { view: "reports", label: "Reports", href: "/accounting/reports", icon: LineChartIcon },
@@ -114,8 +110,6 @@ export default function AccountingPage() {
   const view = viewFromPath(pathname);
 
   const accounts = useAccountingAccounts();
-  const accountTree = useAccountTree(view === "chart");
-  const parentOptions = useParentAccountOptions(view === "chart");
   const homeView = view === "home";
   const homeSummary = useAccountingHomeSummary(homeView);
   const seedChart = useSeedChartOfAccounts();
@@ -123,11 +117,9 @@ export default function AccountingPage() {
   const hasAccounts = (accounts.data?.length ?? 0) > 0;
   const isLoading =
     accounts.isLoading ||
-    (view === "chart" && (accountTree.isLoading || parentOptions.isLoading)) ||
     (homeView && homeSummary.isLoading);
   const error =
     accounts.error ||
-    (view === "chart" ? accountTree.error || parentOptions.error : null) ||
     (homeView ? homeSummary.error : null);
 
   const handleSeed = async () => {
@@ -158,7 +150,7 @@ export default function AccountingPage() {
       {error && <div className="error-banner">Could not load accounting data: {error.message}</div>}
       {isLoading && <div className="panel-state"><div className="loader" />Loading accounting...</div>}
 
-      {!isLoading && !error && !hasAccounts && (
+      {!isLoading && !error && !hasAccounts && view !== "chart" && (
         <div className="card" style={{ padding: 24, marginTop: 16 }}>
           <p className="eyebrow">First run</p>
           <h2 style={{ margin: "0 0 8px" }}>Set up the chart of accounts</h2>
@@ -172,12 +164,7 @@ export default function AccountingPage() {
       )}
 
       {!isLoading && !error && view === "chart" && (
-        <ChartView
-          groups={accountTree.data ?? []}
-          parents={parentOptions.data ?? []}
-          onSeed={handleSeed}
-          seedPending={seedChart.isPending}
-        />
+        <ChartView accounts={accounts.data ?? []} />
       )}
       {!isLoading && !error && hasAccounts && view === "home" && homeSummary.data && (
         <AccountingHome summary={homeSummary.data} />
@@ -350,33 +337,8 @@ function Metric({ label, value, detail, tone }: { label: string; value: string; 
   );
 }
 
-function ChartView({
-  groups,
-  parents,
-  onSeed,
-  seedPending,
-}: {
-  groups: AccountTreeGroup[];
-  parents: ParentAccountOption[];
-  onSeed: () => void;
-  seedPending: boolean;
-}) {
-  const accountCount = groups.reduce((sum, group) => sum + group.accounts.length, 0);
-
-  return (
-    <>
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Chart of accounts</p>
-          <h2>{accountCount} accounts in statement structure</h2>
-        </div>
-        <button type="button" className="add-button" onClick={onSeed} disabled={seedPending}>
-          {seedPending ? "Loading..." : "Load standard accounts"}
-        </button>
-      </div>
-      <AccountTree groups={groups} parents={parents} />
-    </>
-  );
+function ChartView({ accounts }: { accounts: ChartAccount[] }) {
+  return <ChartsAccountingModule accounts={accounts} />;
 }
 
 function JournalView({ accounts }: { accounts: ChartAccount[] }) {
