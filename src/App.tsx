@@ -4,6 +4,7 @@ import AppLayout from "@/components/app-layout";
 import AuthCallback from "@/pages/auth/Callback";
 import AuthPage from "@/pages/auth/AuthPage";
 import Dashboard from "@/pages/Dashboard";
+import ChartsPage from "@/pages/ChartsPage";
 import Index from "@/pages/Index";
 import SettingsPage from "@/pages/settings/page";
 import Setup from "@/pages/Setup";
@@ -19,6 +20,7 @@ export default function App() {
       <Route path="/" element={<Index />} />
       <Route element={<AppLayout />}>
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/charts" element={<ChartsPage />} />
         <Route path="/jobs" element={<Dashboard />} />
         <Route path="/customers" element={<Dashboard />} />
         <Route path="/stock" element={<Dashboard />} />

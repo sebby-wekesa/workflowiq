@@ -55,6 +55,7 @@ type ChartFilters = {
   payee: string;
   transactionType: string;
   status: string;
+  user: string;
 };
 
 const EMPTY_FILTERS: ChartFilters = {
@@ -67,6 +68,7 @@ const EMPTY_FILTERS: ChartFilters = {
   payee: "",
   transactionType: "",
   status: "",
+  user: "",
 };
 
 const SECTIONS: { id: ChartSection; label: string; icon: ComponentType<{ className?: string }> }[] = [
@@ -218,6 +220,7 @@ export function ChartsAccountingModule({
         if (account?.chart_account_id !== filters.accountId) return false;
       }
       if (filters.transactionType && transaction.transactionType !== filters.transactionType) return false;
+      if (filters.user && !transaction.user.toLowerCase().includes(filters.user.toLowerCase())) return false;
       return includesSearch(filters, [
         transaction.referenceNumber,
         transaction.description,
@@ -235,6 +238,7 @@ export function ChartsAccountingModule({
       if (filters.branch && invoice.branch !== filters.branch) return false;
       if (filters.customerId && invoice.customer_id !== filters.customerId) return false;
       if (filters.status && invoice.status !== filters.status) return false;
+      if (filters.payee && !String(invoice.customer?.name ?? "").toLowerCase().includes(filters.payee.toLowerCase())) return false;
       return includesSearch(filters, [
         invoice.invoice_number,
         invoice.customer?.name,
@@ -253,6 +257,7 @@ export function ChartsAccountingModule({
       if (filters.branch && note.branch !== filters.branch) return false;
       if (filters.customerId && note.customer_id !== filters.customerId) return false;
       if (filters.status && note.status !== filters.status) return false;
+      if (filters.payee && !String(note.customer?.name ?? "").toLowerCase().includes(filters.payee.toLowerCase())) return false;
       return includesSearch(filters, [note.credit_note_number, note.customer?.name, note.reason, note.notes, note.status]);
     }),
     [creditNotes.data, filters],
@@ -456,6 +461,7 @@ function ChartsFilterBar({
           <option value="reconciled">Reconciled</option>
         </select>
       </label>
+      <label>User<input value={filters.user} onChange={(event) => setFilters({ ...filters, user: event.target.value })} /></label>
       <button type="button" className="button button-secondary" onClick={() => setFilters(EMPTY_FILTERS)}>
         Clear
       </button>
@@ -524,12 +530,24 @@ function RevenueSection({
 }) {
   const totalRevenue = invoices.reduce((sum, invoice) => sum + Number(invoice.net_amount), 0);
   const creditTotal = creditNotes.reduce((sum, note) => sum + Number(note.amount), 0);
+  const today = new Date(localDate());
+  const outstanding = invoices
+    .filter((invoice) => !["paid", "void"].includes(invoice.status))
+    .reduce((sum, invoice) => sum + Number(invoice.total_amount), 0);
+  const paid = invoices
+    .filter((invoice) => invoice.status === "paid")
+    .reduce((sum, invoice) => sum + Number(invoice.total_amount), 0);
+  const overdue = invoices
+    .filter((invoice) => invoice.due_date && invoice.status !== "paid" && invoice.status !== "void" && new Date(invoice.due_date) < today)
+    .reduce((sum, invoice) => sum + Number(invoice.total_amount), 0);
 
   return (
     <>
       <section className="charts-summary-row">
         <MetricCard label="Total Revenue" value={money(totalRevenue)} tone={0} />
-        <MetricCard label="Outstanding Invoices" value={money(invoices.filter((invoice) => invoice.status !== "paid").reduce((sum, invoice) => sum + Number(invoice.total_amount), 0))} tone={1} />
+        <MetricCard label="Outstanding Invoices" value={money(outstanding)} tone={1} />
+        <MetricCard label="Paid Invoices" value={money(paid)} tone={2} />
+        <MetricCard label="Overdue Invoices" value={money(overdue)} tone={3} />
         <MetricCard label="Credit Notes Issued" value={money(creditTotal)} tone={2} />
         <MetricCard label="Net Revenue" value={money(totalRevenue - creditTotal)} tone={3} />
       </section>
@@ -566,6 +584,9 @@ function CogsSection({
   paymentAccounts: ChartAccount[];
 }) {
   const total = entries.reduce((sum, entry) => sum + Number(entry.total_amount), 0);
+  const revenue = invoices
+    .filter((invoice) => invoice.status !== "void")
+    .reduce((sum, invoice) => sum + Number(invoice.net_amount), 0);
   const byBranch = groupSum(entries, (entry) => entry.branch ?? "Unassigned", (entry) => Number(entry.total_amount));
   const byProduct = groupSum(entries, (entry) => entry.product_service ?? "Unassigned", (entry) => Number(entry.total_amount));
 
@@ -573,8 +594,9 @@ function CogsSection({
     <>
       <section className="charts-summary-row">
         <MetricCard label="Total COGS" value={money(total)} tone={0} />
-        <MetricCard label="Branches" value={String(byBranch.length)} tone={1} />
-        <MetricCard label="Products / services" value={String(byProduct.length)} tone={2} />
+        <MetricCard label="COGS by branch" value={String(byBranch.length)} tone={1} />
+        <MetricCard label="COGS by product/service" value={String(byProduct.length)} tone={2} />
+        <MetricCard label="Gross Profit" value={money(revenue - total)} tone={3} />
       </section>
       <section className="charts-two-column">
         <CogsForm invoices={invoices} paymentAccounts={paymentAccounts} />
