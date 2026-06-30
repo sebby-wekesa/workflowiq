@@ -119,6 +119,8 @@ export interface ChartAccount {
   parent_id: string | null;
   note: string | null;
   vat_applicable: boolean;
+  tax_code_id: string | null;
+  is_postable: boolean;
   is_bank: boolean;
   is_system: boolean;
   is_active: boolean;

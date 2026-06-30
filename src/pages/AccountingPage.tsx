@@ -104,6 +104,10 @@ function parseAmount(value: string) {
   return n;
 }
 
+function isPostableAccount(account: ChartAccount) {
+  return account.is_active && account.is_postable !== false;
+}
+
 export default function AccountingPage() {
   const { appUser, organization } = useAuth();
   const { pathname } = useLocation();
@@ -379,7 +383,7 @@ function JournalView({ accounts }: { accounts: ChartAccount[] }) {
   const entries = useAccountingEntries();
   return (
     <>
-      <ManualJournalForm accounts={accounts.filter((a) => a.is_active)} />
+      <ManualJournalForm accounts={accounts.filter(isPostableAccount)} />
       <DataTable title="Recent journal entries" columns={["Date", "Entry", "Memo", "Source", "Debit", "Credit"]}>
         {(entries.data ?? []).slice(0, 30).map((entry) => (
           <tr key={entry.id}>
@@ -473,7 +477,7 @@ function TransactionsView({ accounts }: { accounts: ChartAccount[] }) {
   const bills = useAccountingBills();
   const expenses = useAccountingExpenses();
   const payments = useAccountingPayments();
-  const activeAccounts = accounts.filter((a) => a.is_active);
+  const activeAccounts = accounts.filter(isPostableAccount);
   const bankAccounts = activeAccounts.filter((a) => a.is_bank || a.description === "key:cash_on_hand");
   const expenseAccounts = activeAccounts.filter((a) => a.type === "EXPENSE" || a.type === "ASSET");
 

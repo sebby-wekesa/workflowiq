@@ -1,0 +1,4 @@
+interface:
+  display_name: "WorkflowIQ React App"
+  short_description: "React/Vite app patterns for WorkflowIQ"
+  default_prompt: "Use $workflowiq-react-app to build or adjust WorkflowIQ UI flows consistently."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "WorkflowIQ Release Checks"
+  short_description: "Build, migration, and deployment checks"
+  default_prompt: "Use $workflowiq-release-checks to verify WorkflowIQ changes before release."

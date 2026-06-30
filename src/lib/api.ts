@@ -436,8 +436,17 @@ export type AccountTreeAccount = {
   classificationLabel: string;
   currency: string;
   vatApplicable: boolean;
+  isPostable: boolean;
   parentId: string | null;
   balance: number;
+};
+
+export type SeedChartResult = {
+  success: boolean;
+  created: number;
+  total: number;
+  templateTotal?: number;
+  taxCodes?: number;
 };
 
 export type AccountTreeGroup = {
@@ -563,6 +572,10 @@ function isCashOrBankAccount(account: ChartAccount) {
   return account.classification === "BANK" || account.is_bank || account.description === "key:cash_on_hand";
 }
 
+function isPostableAccount(account: ChartAccount) {
+  return account.is_postable !== false;
+}
+
 function isCashInHandAccount(account: ChartAccount) {
   const name = account.name.toLowerCase();
   return account.description === "key:cash_on_hand" || ((name.includes("cash") && !name.includes("bank")) || name.includes("petty"));
@@ -597,7 +610,7 @@ async function generalLedgerSource(input?: { from?: string; to?: string }) {
 }
 
 export const accountingApi = {
-  seedChart: () => supabase.rpc("seed_chart_of_accounts").then(unwrap<{ success: boolean; created: number; total: number }>),
+  seedChart: () => supabase.rpc("seed_chart_of_accounts").then(unwrap<SeedChartResult>),
   listAccounts: () =>
     supabase.from("chart_account").select("*").order("code").then(unwrap<ChartAccount[]>),
   listActiveAccounts: () =>
@@ -694,7 +707,8 @@ export const accountingApi = {
         classification: account.classification,
         classificationLabel,
         currency: account.currency ?? "KES",
-        vatApplicable: Boolean(account.vat_applicable),
+        vatApplicable: Boolean(account.tax_code_id ?? account.vat_applicable),
+        isPostable: isPostableAccount(account),
         parentId: account.parent_id,
         balance: r2(balance),
       });
@@ -748,7 +762,7 @@ export const accountingApi = {
     const bankRows: AccountSummaryRow[] = [];
     const cashRows: AccountSummaryRow[] = [];
 
-    for (const account of accounts.filter(isCashOrBankAccount)) {
+    for (const account of accounts.filter((account) => isPostableAccount(account) && isCashOrBankAccount(account))) {
       const row = accountSummaryRow(account, totals);
       if (isCashInHandAccount(account)) cashRows.push(row);
       else bankRows.push(row);
@@ -765,11 +779,11 @@ export const accountingApi = {
         cashTotal,
         grandTotal: r2(bankTotal + cashTotal),
       },
-      loans: accountSummaryBucket(accounts, totals, isLoanAccount),
+      loans: accountSummaryBucket(accounts, totals, (account) => isPostableAccount(account) && isLoanAccount(account)),
       upcoming,
-      debtors: accountSummaryBucket(accounts, totals, isDebtorAccount),
-      creditors: accountSummaryBucket(accounts, totals, isCreditorAccount),
-      accruals: accountSummaryBucket(accounts, totals, isAccrualAccount),
+      debtors: accountSummaryBucket(accounts, totals, (account) => isPostableAccount(account) && isDebtorAccount(account)),
+      creditors: accountSummaryBucket(accounts, totals, (account) => isPostableAccount(account) && isCreditorAccount(account)),
+      accruals: accountSummaryBucket(accounts, totals, (account) => isPostableAccount(account) && isAccrualAccount(account)),
     };
   },
   createSupplier: (input: { name: string; phone?: string; email?: string; location?: string; notes?: string }) =>
@@ -986,7 +1000,7 @@ export const accountingApi = {
         if (amount !== 0) {
           expenses.push({ code: account.code, name: account.name, amount: r2(amount) });
           totalExpense += amount;
-          if (account.code === "5000") costOfSales += amount;
+          if (accountStatementGroup(account) === "COST_OF_GOODS_SOLD") costOfSales += amount;
         }
       }
     }
@@ -1146,7 +1160,7 @@ export const useSupplierLedger = (enabled = true) =>
 export const useAccountingHomeSummary = (enabled = true) =>
   useQuery({ queryKey: ["accounting", "home-summary"], queryFn: async () => accountingApi.getAccountingHomeSummary(), enabled });
 
-export const useSeedChartOfAccounts = accountingMutation<void, { success: boolean; created: number; total: number }>(() => accountingApi.seedChart());
+export const useSeedChartOfAccounts = accountingMutation<void, SeedChartResult>(() => accountingApi.seedChart());
 export const useCreateAccountingAccount = accountingMutation(accountingApi.createAccount);
 export const useCreateClassifiedAccount = accountingMutation(accountingApi.createClassifiedAccount);
 export const useUpdateAccountingAccount = accountingMutation(accountingApi.updateAccount);

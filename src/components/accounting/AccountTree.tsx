@@ -98,7 +98,9 @@ export function AccountTree({
                             {account.name}
                           </strong>
                           <small>
-                            {account.vatApplicable ? "VAT applies" : "No VAT flag"}
+                            {account.isPostable ? "Postable" : "Header"}
+                            {" - "}
+                            {account.vatApplicable ? "Tax code" : "No tax code"}
                             {account.parentId ? " - sub-account" : ""}
                           </small>
                         </td>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "WorkflowIQ Supabase Accounting"
+  short_description: "Accounting schema and COA workflow guardrails"
+  default_prompt: "Use $workflowiq-supabase-accounting to update the accounting schema or chart of accounts safely."
