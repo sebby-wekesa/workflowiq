@@ -9,7 +9,6 @@ import {
   PlusIcon,
   PrinterIcon,
   ReceiptIcon,
-  SearchIcon,
 } from "lucide-react";
 import {
   useAccountingSuppliers,
@@ -71,6 +70,34 @@ const EMPTY_FILTERS: ChartFilters = {
   user: "",
 };
 
+type LedgerNormalBalance = "debit" | "credit";
+
+type LedgerRow = {
+  id: string;
+  date: string;
+  number: string;
+  party?: string | null;
+  branch?: string | null;
+  account?: string | null;
+  accountId?: string | null;
+  description?: string | null;
+  type?: string | null;
+  status?: string | null;
+  debit: number;
+  credit: number;
+  balance?: number;
+};
+
+type SubcategoryCard = {
+  id: string;
+  label: string;
+  description: string;
+  count: number;
+  debit: number;
+  credit: number;
+  normalBalance?: LedgerNormalBalance;
+};
+
 const SECTIONS: { id: ChartSection; label: string; icon: ComponentType<{ className?: string }> }[] = [
   { id: "cash", label: "Cash Book", icon: BanknoteIcon },
   { id: "revenue", label: "Revenue", icon: ReceiptIcon },
@@ -82,33 +109,48 @@ const SECTIONS: { id: ChartSection; label: string; icon: ComponentType<{ classNa
 
 const ADMIN_CATEGORIES = [
   "Rent",
-  "Salaries",
-  "Office supplies",
+  "Salaries and Wages",
+  "Office Supplies",
   "Utilities",
-  "Internet",
-  "Licenses",
-  "Professional fees",
+  "Internet and Communication",
+  "Licenses and Subscriptions",
+  "Professional Fees",
   "Insurance",
-  "Other admin costs",
 ];
 
 const FINANCE_CATEGORIES = [
-  "Bank charges",
-  "Loan interest",
-  "Mobile money charges",
-  "Transaction fees",
+  "Bank Charges",
+  "Loan Interest",
+  "M-Pesa Transaction Charges",
+  "Card/Payment Processing Fees",
   "Penalties",
-  "Other finance costs",
+  "Other Finance Costs",
 ];
 
 const OTHER_CATEGORIES = [
   "Transport",
-  "Repairs and maintenance",
+  "Repairs and Maintenance",
   "Marketing",
-  "Staff welfare",
+  "Staff Welfare",
   "Training",
   "Travel",
-  "Miscellaneous operating costs",
+  "Miscellaneous Expenses",
+];
+
+const REVENUE_CATEGORIES = [
+  "Sales Revenue",
+  "Service Revenue",
+  "Other Income",
+  "Customer Invoices",
+  "Credit Notes",
+];
+
+const COGS_CATEGORIES = [
+  "Direct Materials",
+  "Direct Labour",
+  "Production Costs",
+  "Purchase Costs",
+  "Freight/Inward Transport",
 ];
 
 function money(value: number) {
@@ -175,6 +217,63 @@ function includesSearch(filters: ChartFilters, values: (string | number | null |
   const term = filters.search.trim().toLowerCase();
   if (!term) return true;
   return values.some((value) => String(value ?? "").toLowerCase().includes(term));
+}
+
+function normalize(value: string | null | undefined) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function textMatches(value: string | null | undefined, words: string[]) {
+  const haystack = normalize(value);
+  return words.some((word) => haystack.includes(word));
+}
+
+function categoryMatches(value: string | null | undefined, category: string) {
+  return normalize(value) === normalize(category);
+}
+
+function netBalance(debit: number, credit: number, normalBalance: LedgerNormalBalance = "debit") {
+  return normalBalance === "credit" ? credit - debit : debit - credit;
+}
+
+function ledgerTotals(rows: LedgerRow[], normalBalance: LedgerNormalBalance = "debit") {
+  const debit = rows.reduce((sum, row) => sum + Number(row.debit), 0);
+  const credit = rows.reduce((sum, row) => sum + Number(row.credit), 0);
+  return {
+    debit,
+    credit,
+    net: netBalance(debit, credit, normalBalance),
+  };
+}
+
+function filterLedgerRows(rows: LedgerRow[], filters: ChartFilters) {
+  const hasAccountIds = rows.some((row) => row.accountId);
+  return rows.filter((row) => {
+    if (!inDateRange(row.date, filters)) return false;
+    if (filters.branch && row.branch !== filters.branch) return false;
+    if (filters.accountId && hasAccountIds && row.accountId !== filters.accountId) return false;
+    if (filters.status && row.status !== filters.status) return false;
+    return true;
+  });
+}
+
+function buildCard(
+  id: string,
+  label: string,
+  description: string,
+  rows: LedgerRow[],
+  normalBalance: LedgerNormalBalance = "debit",
+): SubcategoryCard {
+  const totals = ledgerTotals(rows, normalBalance);
+  return {
+    id,
+    label,
+    description,
+    count: rows.length,
+    debit: totals.debit,
+    credit: totals.credit,
+    normalBalance,
+  };
 }
 
 export function ChartsAccountingModule({
@@ -331,14 +430,6 @@ export function ChartsAccountingModule({
         ))}
       </div>
 
-      <ChartsFilterBar
-        filters={filters}
-        setFilters={setFilters}
-        accounts={accountOptions}
-        customers={customers.data ?? []}
-        branches={branchOptions}
-      />
-
       {error && <div className="error-banner">Could not load chart accounting data: {error.message}</div>}
       {isLoading && <div className="panel-state"><div className="loader" />Loading chart...</div>}
 
@@ -348,6 +439,10 @@ export function ChartsAccountingModule({
           transactions={filteredTransactions}
           reconciliations={reconciliations.data ?? []}
           ledgerAccounts={activeAccounts}
+          filters={filters}
+          setFilters={setFilters}
+          filterAccounts={accountOptions}
+          branches={branchOptions}
         />
       )}
 
@@ -356,6 +451,10 @@ export function ChartsAccountingModule({
           customers={customers.data ?? []}
           invoices={filteredInvoices}
           creditNotes={filteredCreditNotes}
+          filters={filters}
+          setFilters={setFilters}
+          accounts={accountOptions}
+          branches={branchOptions}
         />
       )}
 
@@ -364,6 +463,9 @@ export function ChartsAccountingModule({
           entries={filteredCogs}
           invoices={invoices.data ?? []}
           paymentAccounts={accountOptions}
+          filters={filters}
+          setFilters={setFilters}
+          branches={branchOptions}
         />
       )}
 
@@ -375,6 +477,9 @@ export function ChartsAccountingModule({
           expenses={filteredExpenses.filter((expense) => expense.expense_group === "administrative")}
           paymentAccounts={accountOptions}
           suppliers={suppliers.data ?? []}
+          filters={filters}
+          setFilters={setFilters}
+          branches={branchOptions}
         />
       )}
 
@@ -386,6 +491,9 @@ export function ChartsAccountingModule({
           expenses={filteredExpenses.filter((expense) => expense.expense_group === "finance")}
           paymentAccounts={accountOptions}
           suppliers={suppliers.data ?? []}
+          filters={filters}
+          setFilters={setFilters}
+          branches={branchOptions}
         />
       )}
 
@@ -397,6 +505,9 @@ export function ChartsAccountingModule({
           expenses={filteredExpenses.filter((expense) => expense.expense_group === "other_operating")}
           paymentAccounts={accountOptions}
           suppliers={suppliers.data ?? []}
+          filters={filters}
+          setFilters={setFilters}
+          branches={branchOptions}
         />
       )}
 
@@ -404,68 +515,169 @@ export function ChartsAccountingModule({
   );
 }
 
-function ChartsFilterBar({
+function SubcategoryCards({
+  cards,
+  selectedId,
+  onSelect,
+}: {
+  cards: SubcategoryCard[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <section className="charts-subcategory-grid" aria-label="Accounting subcategories">
+      {cards.map((card) => {
+        const net = netBalance(card.debit, card.credit, card.normalBalance ?? "debit");
+        return (
+          <button
+            key={card.id}
+            type="button"
+            className={selectedId === card.id ? "charts-subcategory-card charts-subcategory-card-active" : "charts-subcategory-card"}
+            onClick={() => onSelect(card.id)}
+          >
+            <span>{card.label}</span>
+            <strong>{money(net)}</strong>
+            <small>{card.description}</small>
+            <em>{card.count} transactions</em>
+          </button>
+        );
+      })}
+    </section>
+  );
+}
+
+function SubcategoryFilterBar({
   filters,
   setFilters,
   accounts,
-  customers,
   branches,
 }: {
   filters: ChartFilters;
   setFilters: (filters: ChartFilters) => void;
   accounts: ChartAccount[];
-  customers: Customer[];
   branches: string[];
 }) {
   return (
-    <div className="charts-filter-panel">
-      <label className="charts-search">
-        <SearchIcon className="size-4" />
-        <input
-          value={filters.search}
-          onChange={(event) => setFilters({ ...filters, search: event.target.value })}
-          placeholder="Search tables"
-        />
-      </label>
-      <label>From<input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></label>
-      <label>To<input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></label>
-      <label>Branch
+    <div className="charts-filter-panel charts-filter-panel-compact">
+      <label>Date from<input type="date" value={filters.from} onChange={(event) => setFilters({ ...filters, from: event.target.value })} /></label>
+      <label>Date to<input type="date" value={filters.to} onChange={(event) => setFilters({ ...filters, to: event.target.value })} /></label>
+      <label>Branch filter
         <select value={filters.branch} onChange={(event) => setFilters({ ...filters, branch: event.target.value })}>
           <option value="">All branches</option>
           {branches.map((branch) => <option key={branch} value={branch}>{branch}</option>)}
         </select>
       </label>
-      <label>Account
+      <label>Account filter
         <select value={filters.accountId} onChange={(event) => setFilters({ ...filters, accountId: event.target.value })}>
           <option value="">All accounts</option>
           {accounts.map((account) => <option key={account.id} value={account.id}>{account.code} - {account.name}</option>)}
         </select>
       </label>
-      <label>Customer
-        <select value={filters.customerId} onChange={(event) => setFilters({ ...filters, customerId: event.target.value })}>
-          <option value="">All customers</option>
-          {customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}</option>)}
-        </select>
-      </label>
-      <label>Supplier / Payee<input value={filters.payee} onChange={(event) => setFilters({ ...filters, payee: event.target.value })} /></label>
-      <label>Type<input value={filters.transactionType} onChange={(event) => setFilters({ ...filters, transactionType: event.target.value })} /></label>
-      <label>Status
+      <label>Status filter
         <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
           <option value="">All statuses</option>
           <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="draft">Draft</option>
           <option value="posted">Posted</option>
           <option value="approved">Approved</option>
           <option value="paid">Paid</option>
           <option value="partial">Partial</option>
           <option value="open">Open</option>
           <option value="reconciled">Reconciled</option>
+          <option value="void">Void</option>
         </select>
       </label>
-      <label>User<input value={filters.user} onChange={(event) => setFilters({ ...filters, user: event.target.value })} /></label>
-      <button type="button" className="button button-secondary" onClick={() => setFilters(EMPTY_FILTERS)}>
-        Clear
+      <button type="button" className="button button-secondary" onClick={() => setFilters({ ...filters, from: "", to: "", branch: "", accountId: "", status: "" })}>
+        Clear filters
       </button>
     </div>
+  );
+}
+
+function SubcategoryLedgerPanel({
+  title,
+  description,
+  rows,
+  normalBalance = "debit",
+  filters,
+  setFilters,
+  accounts,
+  branches,
+  addLabel = "Add transaction",
+  showForm,
+  onToggleForm,
+  form,
+}: {
+  title: string;
+  description: string;
+  rows: LedgerRow[];
+  normalBalance?: LedgerNormalBalance;
+  filters: ChartFilters;
+  setFilters: (filters: ChartFilters) => void;
+  accounts: ChartAccount[];
+  branches: string[];
+  addLabel?: string;
+  showForm: boolean;
+  onToggleForm: () => void;
+  form?: ReactNode;
+}) {
+  const visibleRows = filterLedgerRows(rows, filters);
+  const totals = ledgerTotals(visibleRows, normalBalance);
+
+  return (
+    <section className="charts-subcategory-detail">
+      <div className="charts-subcategory-heading">
+        <div>
+          <p className="eyebrow">Selected subcategory</p>
+          <h2>{title}</h2>
+          <span>{description}</span>
+        </div>
+        {form && (
+          <button type="button" className="button button-primary" onClick={onToggleForm}>
+            <PlusIcon className="size-4" />
+            {showForm ? "Hide form" : addLabel}
+          </button>
+        )}
+      </div>
+
+      {showForm && form}
+
+      <SubcategoryFilterBar filters={filters} setFilters={setFilters} accounts={accounts} branches={branches} />
+
+      <section className="charts-summary-row">
+        <MetricCard label="Total debit" value={money(totals.debit)} tone={0} />
+        <MetricCard label="Total credit" value={money(totals.credit)} tone={1} />
+        <MetricCard label="Net balance" value={money(totals.net)} tone={2} />
+      </section>
+
+      <LedgerRowsTable rows={visibleRows} />
+    </section>
+  );
+}
+
+function LedgerRowsTable({ rows }: { rows: LedgerRow[] }) {
+  return (
+    <ChartsTable title="Transaction table" columns={["Date", "Number", "Party", "Branch", "Description", "Account", "Debit", "Credit", "Net", "Status"]}>
+      {rows.length === 0 ? (
+        <tr>
+          <td colSpan={10}>No transactions for this subcategory.</td>
+        </tr>
+      ) : rows.map((row) => (
+        <tr key={row.id}>
+          <td>{shortDate(row.date)}</td>
+          <td><strong>{row.number}</strong><small>{row.type ?? "-"}</small></td>
+          <td>{row.party ?? "-"}</td>
+          <td>{row.branch ?? "-"}</td>
+          <td>{row.description ?? "-"}</td>
+          <td>{row.account ?? "-"}</td>
+          <td>{money(row.debit)}</td>
+          <td>{money(row.credit)}</td>
+          <td>{money(row.balance ?? row.debit - row.credit)}</td>
+          <td>{row.status ? <span className="status">{row.status}</span> : "-"}</td>
+        </tr>
+      ))}
+    </ChartsTable>
   );
 }
 
@@ -474,20 +686,100 @@ function CashBookSection({
   transactions,
   reconciliations,
   ledgerAccounts,
+  filters,
+  setFilters,
+  filterAccounts,
+  branches,
 }: {
   accounts: CashBookAccount[];
   transactions: CashBookTransactionRow[];
   reconciliations: { id: string; reconciliation_number: string; statement_date: string; statement_balance: number; system_balance: number; difference: number; status: string; cash_account?: { account_name: string } | null }[];
   ledgerAccounts: ChartAccount[];
+  filters: ChartFilters;
+  setFilters: (filters: ChartFilters) => void;
+  filterAccounts: ChartAccount[];
+  branches: string[];
 }) {
-  const [subCategory, setSubCategory] = useState<"bank" | "cash">("bank");
+  const [subCategory, setSubCategory] = useState("bank-accounts");
+  const [showForm, setShowForm] = useState(false);
   const bankAccounts = accounts.filter((account) => account.account_kind === "bank");
   const cashAccounts = accounts.filter((account) => account.account_kind === "cash");
+  const accountById = new Map(accounts.map((account) => [account.id, account]));
   const bankTotal = bankAccounts.reduce((sum, account) => sum + account.currentBalance, 0);
   const cashTotal = cashAccounts.reduce((sum, account) => sum + account.currentBalance, 0);
-  const selectedAccounts = subCategory === "bank" ? bankAccounts : cashAccounts;
-  const selectedTransactions = transactions.filter((transaction) => transaction.accountKind === subCategory);
-  const selectedTitle = subCategory === "bank" ? "Cash at Bank" : "Cash in Hand";
+  const bankTransactions = transactions.filter((transaction) => transaction.accountKind === "bank");
+  const cashTransactions = transactions.filter((transaction) => transaction.accountKind === "cash");
+  const transactionRows = (rows: CashBookTransactionRow[]): LedgerRow[] => rows.map((transaction) => {
+    const account = accountById.get(transaction.cashAccountId);
+    return {
+      id: transaction.id,
+      date: transaction.date,
+      number: transaction.referenceNumber,
+      party: transaction.user,
+      branch: account?.branch ?? null,
+      account: transaction.accountName,
+      accountId: account?.chart_account_id ?? null,
+      description: transaction.description,
+      type: transaction.transactionType,
+      status: "posted",
+      debit: transaction.debit,
+      credit: transaction.credit,
+      balance: transaction.runningBalance,
+    };
+  });
+  const reconciliationRows: LedgerRow[] = reconciliations.map((row) => ({
+    id: row.id,
+    date: row.statement_date,
+    number: row.reconciliation_number,
+    party: row.cash_account?.account_name ?? null,
+    account: row.cash_account?.account_name ?? null,
+    description: "Bank reconciliation",
+    type: "Reconciliation",
+    status: row.status,
+    debit: Number(row.statement_balance),
+    credit: Number(row.system_balance),
+    balance: Number(row.difference),
+  }));
+  const rowsBySubcategory: Record<string, LedgerRow[]> = {
+    "bank-accounts": transactionRows(bankTransactions),
+    "bank-deposit": transactionRows(bankTransactions.filter((transaction) => normalize(transaction.transactionType) === "receive deposit")),
+    "bank-cheque": transactionRows(bankTransactions.filter((transaction) => normalize(transaction.transactionType) === "write cheque")),
+    "bank-journal": transactionRows(bankTransactions.filter((transaction) => normalize(transaction.transactionType).includes("journal"))),
+    "bank-reconciliation": reconciliationRows,
+    "cash-petty": transactionRows(cashTransactions.filter((transaction) => textMatches(transaction.accountName, ["petty"]))),
+    "cash-mpesa": transactionRows(cashTransactions.filter((transaction) => textMatches(transaction.accountName, ["m-pesa", "mpesa"]))),
+    "cash-deposit": transactionRows(cashTransactions.filter((transaction) => normalize(transaction.transactionType) === "receive deposit")),
+    "cash-payment": transactionRows(cashTransactions.filter((transaction) => ["cash payment", "write cheque", "payment"].some((term) => normalize(transaction.transactionType).includes(term)))),
+    "cash-journal": transactionRows(cashTransactions.filter((transaction) => normalize(transaction.transactionType).includes("journal"))),
+  };
+  const cards: SubcategoryCard[] = [
+    buildCard("bank-accounts", "Bank accounts", "Cash at Bank account activity", rowsBySubcategory["bank-accounts"]),
+    buildCard("bank-deposit", "Receive deposit", "Cash at Bank receipts", rowsBySubcategory["bank-deposit"]),
+    buildCard("bank-cheque", "Write cheque", "Cash at Bank payments by cheque", rowsBySubcategory["bank-cheque"]),
+    buildCard("bank-journal", "Journal", "Cash at Bank journal entries", rowsBySubcategory["bank-journal"]),
+    buildCard("bank-reconciliation", "Reconciliation", "Cash at Bank reconciliations", rowsBySubcategory["bank-reconciliation"]),
+    buildCard("cash-petty", "Petty Cash", "Cash in Hand petty cash activity", rowsBySubcategory["cash-petty"]),
+    buildCard("cash-mpesa", "M-Pesa", "Cash in Hand M-Pesa activity", rowsBySubcategory["cash-mpesa"]),
+    buildCard("cash-deposit", "Receive deposit", "Cash in Hand receipts", rowsBySubcategory["cash-deposit"]),
+    buildCard("cash-payment", "Write cheque / payment", "Cash in Hand payments", rowsBySubcategory["cash-payment"]),
+    buildCard("cash-journal", "Journal", "Cash in Hand journal entries", rowsBySubcategory["cash-journal"]),
+  ];
+  const selectedCard = cards.find((card) => card.id === subCategory) ?? cards[0];
+  const selectedRows = rowsBySubcategory[selectedCard.id] ?? [];
+  const isBankSubcategory = selectedCard.id.startsWith("bank");
+  const selectedAccounts = isBankSubcategory ? bankAccounts : cashAccounts;
+  const selectedAction =
+    selectedCard.id.endsWith("deposit") ? "Receive Deposit" :
+    selectedCard.id === "bank-cheque" ? "Write Cheque" :
+    selectedCard.id === "cash-payment" ? "Cash Payment" :
+    selectedCard.id.includes("journal") ? "Journal Entry - Debit Cash" :
+    undefined;
+  const form =
+    selectedCard.id === "bank-accounts" ? <CashAccountForm kind="bank" /> :
+    selectedCard.id === "cash-petty" ? <CashAccountForm kind="cash" suggestedName="Petty Cash" /> :
+    selectedCard.id === "cash-mpesa" ? <CashAccountForm kind="cash" suggestedName="M-Pesa" /> :
+    selectedCard.id === "bank-reconciliation" ? <BankReconciliationForm accounts={bankAccounts} /> :
+    <CashTransactionForm key={`transaction-${selectedCard.id}`} kind={isBankSubcategory ? "bank" : "cash"} accounts={selectedAccounts} ledgerAccounts={ledgerAccounts} initialAction={selectedAction} />;
 
   return (
     <>
@@ -496,50 +788,31 @@ function CashBookSection({
         <MetricCard label="Total Cash in Hand" value={money(cashTotal)} tone={1} />
         <MetricCard label="Total Cash Book Balance" value={money(bankTotal + cashTotal)} tone={2} />
       </section>
-      <section className="cash-book-subcategories" aria-label="Cash Book subcategories">
-        <button
-          type="button"
-          className={subCategory === "bank" ? "cash-book-subcategory cash-book-subcategory-active" : "cash-book-subcategory"}
-          onClick={() => setSubCategory("bank")}
-        >
-          <span>Cash at Bank</span>
-          <strong>{money(bankTotal)}</strong>
-          <small>{bankAccounts.length} bank accounts</small>
-        </button>
-        <button
-          type="button"
-          className={subCategory === "cash" ? "cash-book-subcategory cash-book-subcategory-active" : "cash-book-subcategory"}
-          onClick={() => setSubCategory("cash")}
-        >
-          <span>Cash in Hand</span>
-          <strong>{money(cashTotal)}</strong>
-          <small>{cashAccounts.length} cash accounts</small>
-        </button>
-      </section>
-      <section className="charts-two-column">
-        <CashAccountForm key={`account-${subCategory}`} kind={subCategory} />
-        <CashTransactionForm key={`transaction-${subCategory}`} kind={subCategory} accounts={selectedAccounts} ledgerAccounts={ledgerAccounts} />
-        {subCategory === "bank" && <BankReconciliationForm accounts={bankAccounts} />}
-      </section>
+      <SubcategoryCards
+        cards={cards}
+        selectedId={selectedCard.id}
+        onSelect={(id) => {
+          setSubCategory(id);
+          setShowForm(false);
+        }}
+      />
+      <SubcategoryLedgerPanel
+        title={selectedCard.label}
+        description={selectedCard.description}
+        rows={selectedRows}
+        filters={filters}
+        setFilters={setFilters}
+        accounts={filterAccounts}
+        branches={branches}
+        addLabel={selectedCard.id.includes("accounts") || selectedCard.id === "cash-petty" || selectedCard.id === "cash-mpesa" ? "Add account" : "Add transaction"}
+        showForm={showForm}
+        onToggleForm={() => setShowForm((current) => !current)}
+        form={form}
+      />
       <section className="charts-account-ledger">
-        <AccountList title={selectedTitle} accounts={selectedAccounts} />
+        <AccountList title="Cash at Bank" accounts={bankAccounts} />
+        <AccountList title="Cash in Hand" accounts={cashAccounts} />
       </section>
-      <ExportableCashTransactions title={`${selectedTitle} transaction history`} filename={`${subCategory === "bank" ? "cash-at-bank" : "cash-in-hand"}-transactions`} transactions={selectedTransactions} />
-      {subCategory === "bank" && (
-        <ChartsTable title="Bank reconciliations" columns={["Number", "Account", "Statement date", "Statement", "System", "Difference", "Status"]}>
-          {reconciliations.map((row) => (
-            <tr key={row.id}>
-              <td><strong>{row.reconciliation_number}</strong></td>
-              <td>{row.cash_account?.account_name ?? "-"}</td>
-              <td>{shortDate(row.statement_date)}</td>
-              <td>{money(Number(row.statement_balance))}</td>
-              <td>{money(Number(row.system_balance))}</td>
-              <td>{money(Number(row.difference))}</td>
-              <td><span className="status">{row.status}</span></td>
-            </tr>
-          ))}
-        </ChartsTable>
-      )}
     </>
   );
 }
@@ -548,11 +821,21 @@ function RevenueSection({
   customers,
   invoices,
   creditNotes,
+  filters,
+  setFilters,
+  accounts,
+  branches,
 }: {
   customers: Customer[];
   invoices: RevenueInvoice[];
   creditNotes: RevenueCreditNote[];
+  filters: ChartFilters;
+  setFilters: (filters: ChartFilters) => void;
+  accounts: ChartAccount[];
+  branches: string[];
 }) {
+  const [subCategory, setSubCategory] = useState("customer-invoices");
+  const [showForm, setShowForm] = useState(false);
   const totalRevenue = invoices.reduce((sum, invoice) => sum + Number(invoice.net_amount), 0);
   const creditTotal = creditNotes.reduce((sum, note) => sum + Number(note.amount), 0);
   const today = new Date(localDate());
@@ -565,6 +848,54 @@ function RevenueSection({
   const overdue = invoices
     .filter((invoice) => invoice.due_date && invoice.status !== "paid" && invoice.status !== "void" && new Date(invoice.due_date) < today)
     .reduce((sum, invoice) => sum + Number(invoice.total_amount), 0);
+  const invoiceMatches = (invoice: RevenueInvoice, words: string[]) =>
+    (invoice.accounting_invoice_lines ?? []).some((line) => textMatches(line.item, words));
+  const invoiceRows = (rows: RevenueInvoice[]): LedgerRow[] => rows.map((invoice) => ({
+    id: invoice.id,
+    date: invoice.date,
+    number: invoice.invoice_number,
+    party: invoice.customer?.name ?? null,
+    branch: invoice.branch,
+    account: "Revenue",
+    description: (invoice.accounting_invoice_lines ?? []).map((line) => line.item).join(", "),
+    type: "Customer invoice",
+    status: invoice.status,
+    debit: 0,
+    credit: Number(invoice.net_amount),
+    balance: Number(invoice.net_amount),
+  }));
+  const creditNoteRows: LedgerRow[] = creditNotes.map((note) => ({
+    id: note.id,
+    date: note.date,
+    number: note.credit_note_number,
+    party: note.customer?.name ?? null,
+    branch: note.branch,
+    account: "Revenue contra",
+    description: note.reason,
+    type: "Credit note",
+    status: note.status,
+    debit: Number(note.amount),
+    credit: 0,
+    balance: -Number(note.amount),
+  }));
+  const rowsBySubcategory: Record<string, LedgerRow[]> = {
+    "sales-revenue": invoiceRows(invoices.filter((invoice) => invoiceMatches(invoice, ["sale", "sales", "product", "goods", "parts", "spares"]))),
+    "service-revenue": invoiceRows(invoices.filter((invoice) => invoiceMatches(invoice, ["service", "labour", "labor", "repair", "relining", "workshop"]))),
+    "other-income": invoiceRows(invoices.filter((invoice) => invoiceMatches(invoice, ["other", "income", "misc", "fee"]))),
+    "customer-invoices": invoiceRows(invoices),
+    "credit-notes": creditNoteRows,
+  };
+  const cards = [
+    buildCard("sales-revenue", "Sales Revenue", "Invoice lines for goods, parts, and sales", rowsBySubcategory["sales-revenue"], "credit"),
+    buildCard("service-revenue", "Service Revenue", "Invoice lines for labour, repairs, and services", rowsBySubcategory["service-revenue"], "credit"),
+    buildCard("other-income", "Other Income", "Invoice lines tagged as other income", rowsBySubcategory["other-income"], "credit"),
+    buildCard("customer-invoices", "Customer Invoices", "Approved customer invoice revenue", rowsBySubcategory["customer-invoices"], "credit"),
+    buildCard("credit-notes", "Credit Notes", "Revenue reversals and customer credits", rowsBySubcategory["credit-notes"], "credit"),
+  ];
+  const selectedCard = cards.find((card) => card.id === subCategory) ?? cards[3];
+  const form = selectedCard.id === "credit-notes"
+    ? <CreditNoteForm customers={customers} invoices={invoices} />
+    : <CustomerInvoiceForm customers={customers} initialItem={selectedCard.id === "customer-invoices" ? "" : selectedCard.label} />;
 
   return (
     <>
@@ -576,25 +907,27 @@ function RevenueSection({
         <MetricCard label="Credit Notes Issued" value={money(creditTotal)} tone={2} />
         <MetricCard label="Net Revenue" value={money(totalRevenue - creditTotal)} tone={3} />
       </section>
-      <section className="charts-two-column">
-        <CustomerInvoiceForm customers={customers} />
-        <CreditNoteForm customers={customers} invoices={invoices} />
-      </section>
-      <ExportableInvoices invoices={invoices} />
-      <ChartsTable title="Credit notes" columns={["Number", "Linked invoice", "Customer", "Branch", "Reason", "Date", "Amount", "Status"]}>
-        {creditNotes.map((note) => (
-          <tr key={note.id}>
-            <td><strong>{note.credit_note_number}</strong></td>
-            <td>{note.invoice?.invoice_number ?? "-"}</td>
-            <td>{note.customer?.name ?? "-"}</td>
-            <td>{note.branch ?? "-"}</td>
-            <td>{note.reason}</td>
-            <td>{shortDate(note.date)}</td>
-            <td>{money(Number(note.amount))}</td>
-            <td><span className="status">{note.status}</span></td>
-          </tr>
-        ))}
-      </ChartsTable>
+      <SubcategoryCards
+        cards={cards}
+        selectedId={selectedCard.id}
+        onSelect={(id) => {
+          setSubCategory(id);
+          setShowForm(false);
+        }}
+      />
+      <SubcategoryLedgerPanel
+        title={selectedCard.label}
+        description={selectedCard.description}
+        rows={rowsBySubcategory[selectedCard.id] ?? []}
+        normalBalance="credit"
+        filters={filters}
+        setFilters={setFilters}
+        accounts={accounts}
+        branches={branches}
+        showForm={showForm}
+        onToggleForm={() => setShowForm((current) => !current)}
+        form={form}
+      />
     </>
   );
 }
@@ -603,17 +936,59 @@ function CogsSection({
   entries,
   invoices,
   paymentAccounts,
+  filters,
+  setFilters,
+  branches,
 }: {
   entries: CogsEntryRow[];
   invoices: RevenueInvoice[];
   paymentAccounts: ChartAccount[];
+  filters: ChartFilters;
+  setFilters: (filters: ChartFilters) => void;
+  branches: string[];
 }) {
+  const [subCategory, setSubCategory] = useState("direct-materials");
+  const [showForm, setShowForm] = useState(false);
   const total = entries.reduce((sum, entry) => sum + Number(entry.total_amount), 0);
   const revenue = invoices
     .filter((invoice) => invoice.status !== "void")
     .reduce((sum, invoice) => sum + Number(invoice.net_amount), 0);
   const byBranch = groupSum(entries, (entry) => entry.branch ?? "Unassigned", (entry) => Number(entry.total_amount));
   const byProduct = groupSum(entries, (entry) => entry.product_service ?? "Unassigned", (entry) => Number(entry.total_amount));
+  const cogsRows = (rows: CogsEntryRow[], amount: (entry: CogsEntryRow) => number): LedgerRow[] => rows.map((entry) => {
+    const debit = amount(entry);
+    return {
+      id: entry.id,
+      date: entry.date,
+      number: entry.cogs_number,
+      party: entry.invoice?.invoice_number ?? null,
+      branch: entry.branch,
+      account: "Cost of Goods Sold",
+      accountId: entry.payment_account_id,
+      description: [entry.product_service, entry.project, entry.notes].filter(Boolean).join(" - "),
+      type: "COGS entry",
+      status: entry.status,
+      debit,
+      credit: 0,
+      balance: debit,
+    };
+  });
+  const freightEntries = entries.filter((entry) => textMatches([entry.product_service, entry.project, entry.notes].filter(Boolean).join(" "), ["freight", "transport", "inward"]));
+  const rowsBySubcategory: Record<string, LedgerRow[]> = {
+    "direct-materials": cogsRows(entries.filter((entry) => Number(entry.direct_material_cost) > 0), (entry) => Number(entry.direct_material_cost)),
+    "direct-labour": cogsRows(entries.filter((entry) => Number(entry.direct_labour_cost) > 0), (entry) => Number(entry.direct_labour_cost)),
+    "production-costs": cogsRows(entries.filter((entry) => Number(entry.production_service_cost) > 0), (entry) => Number(entry.production_service_cost)),
+    "purchase-costs": cogsRows(entries.filter((entry) => Number(entry.purchase_cost) > 0), (entry) => Number(entry.purchase_cost)),
+    "freight-inward": cogsRows(freightEntries, (entry) => Number(entry.total_amount)),
+  };
+  const cards = [
+    buildCard("direct-materials", "Direct Materials", "Material cost posted to COGS", rowsBySubcategory["direct-materials"]),
+    buildCard("direct-labour", "Direct Labour", "Labour cost posted to COGS", rowsBySubcategory["direct-labour"]),
+    buildCard("production-costs", "Production Costs", "Workshop production/service costs", rowsBySubcategory["production-costs"]),
+    buildCard("purchase-costs", "Purchase Costs", "Purchases posted to cost of sales", rowsBySubcategory["purchase-costs"]),
+    buildCard("freight-inward", "Freight/Inward Transport", "Entries tagged freight, transport, or inward", rowsBySubcategory["freight-inward"]),
+  ];
+  const selectedCard = cards.find((card) => card.id === subCategory) ?? cards[0];
 
   return (
     <>
@@ -623,12 +998,30 @@ function CogsSection({
         <MetricCard label="COGS by product/service" value={String(byProduct.length)} tone={2} />
         <MetricCard label="Gross Profit" value={money(revenue - total)} tone={3} />
       </section>
+      <SubcategoryCards
+        cards={cards}
+        selectedId={selectedCard.id}
+        onSelect={(id) => {
+          setSubCategory(id);
+          setShowForm(false);
+        }}
+      />
+      <SubcategoryLedgerPanel
+        title={selectedCard.label}
+        description={selectedCard.description}
+        rows={rowsBySubcategory[selectedCard.id] ?? []}
+        filters={filters}
+        setFilters={setFilters}
+        accounts={paymentAccounts}
+        branches={branches}
+        showForm={showForm}
+        onToggleForm={() => setShowForm((current) => !current)}
+        form={<CogsForm invoices={invoices} paymentAccounts={paymentAccounts} initialCategory={selectedCard.label} />}
+      />
       <section className="charts-two-column">
-        <CogsForm invoices={invoices} paymentAccounts={paymentAccounts} />
         <BreakdownPanel title="COGS by branch" rows={byBranch} />
         <BreakdownPanel title="COGS by product/service" rows={byProduct} />
       </section>
-      <ExportableCogs entries={entries} />
     </>
   );
 }
@@ -640,6 +1033,9 @@ function ExpenseSection({
   expenses,
   paymentAccounts,
   suppliers,
+  filters,
+  setFilters,
+  branches,
 }: {
   title: string;
   group: "administrative" | "finance" | "other_operating";
@@ -647,9 +1043,41 @@ function ExpenseSection({
   expenses: OperatingExpenseRow[];
   paymentAccounts: ChartAccount[];
   suppliers: Supplier[];
+  filters: ChartFilters;
+  setFilters: (filters: ChartFilters) => void;
+  branches: string[];
 }) {
+  const [subCategory, setSubCategory] = useState(categories[0] ?? "");
+  const [showForm, setShowForm] = useState(false);
   const total = expenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
   const byCategory = groupSum(expenses, (expense) => expense.category, (expense) => Number(expense.amount));
+  const rowsByCategory = Object.fromEntries(categories.map((category) => [
+    category,
+    expenses
+      .filter((expense) => categoryMatches(expense.category, category))
+      .map((expense): LedgerRow => ({
+        id: expense.id,
+        date: expense.date,
+        number: expense.expense_number,
+        party: expense.payee,
+        branch: expense.branch,
+        account: expense.payment_account ? `${expense.payment_account.code} - ${expense.payment_account.name}` : "Operating expense",
+        accountId: expense.payment_account_id,
+        description: expense.description,
+        type: expense.payment_method,
+        status: expense.status,
+        debit: Number(expense.amount),
+        credit: 0,
+        balance: Number(expense.amount),
+      })),
+  ]));
+  const cards = categories.map((category) => buildCard(
+    category,
+    category,
+    `${title} posted as ${category.toLowerCase()}`,
+    rowsByCategory[category] ?? [],
+  ));
+  const selectedCard = cards.find((card) => card.id === subCategory) ?? cards[0];
 
   return (
     <>
@@ -657,24 +1085,46 @@ function ExpenseSection({
         <MetricCard label={title} value={money(total)} tone={0} />
         <MetricCard label="Categories" value={String(byCategory.length)} tone={1} />
       </section>
+      <SubcategoryCards
+        cards={cards}
+        selectedId={selectedCard.id}
+        onSelect={(id) => {
+          setSubCategory(id);
+          setShowForm(false);
+        }}
+      />
+      <SubcategoryLedgerPanel
+        title={selectedCard.label}
+        description={selectedCard.description}
+        rows={rowsByCategory[selectedCard.id] ?? []}
+        filters={filters}
+        setFilters={setFilters}
+        accounts={paymentAccounts}
+        branches={branches}
+        showForm={showForm}
+        onToggleForm={() => setShowForm((current) => !current)}
+        form={(
+          <OperatingExpenseForm
+            key={`${group}-${selectedCard.id}`}
+            group={group}
+            title={title}
+            categories={categories}
+            paymentAccounts={paymentAccounts}
+            suppliers={suppliers}
+            initialCategory={selectedCard.id}
+          />
+        )}
+      />
       <section className="charts-two-column">
-        <OperatingExpenseForm
-          group={group}
-          title={title}
-          categories={categories}
-          paymentAccounts={paymentAccounts}
-          suppliers={suppliers}
-        />
         <BreakdownPanel title="By category" rows={byCategory} />
       </section>
-      <ExportableOperatingExpenses title={title} expenses={expenses} />
     </>
   );
 }
 
-function CashAccountForm({ kind }: { kind: "bank" | "cash" }) {
+function CashAccountForm({ kind, suggestedName = "" }: { kind: "bank" | "cash"; suggestedName?: string }) {
   const createAccount = useCreateCashBookAccount();
-  const [accountName, setAccountName] = useState("");
+  const [accountName, setAccountName] = useState(suggestedName);
   const [bankName, setBankName] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [branch, setBranch] = useState("");
@@ -694,7 +1144,7 @@ function CashAccountForm({ kind }: { kind: "bank" | "cash" }) {
         status: "active",
       });
       toast.success(`Account ${result.code} created`);
-      setAccountName("");
+      setAccountName(suggestedName);
       setBankName("");
       setAccountNumber("");
       setBranch("");
@@ -723,10 +1173,12 @@ function CashTransactionForm({
   kind,
   accounts,
   ledgerAccounts,
+  initialAction,
 }: {
   kind: "bank" | "cash";
   accounts: CashBookAccount[];
   ledgerAccounts: ChartAccount[];
+  initialAction?: string;
 }) {
   const postTransaction = usePostCashBookTransaction();
   const actionOptions = kind === "bank"
@@ -734,7 +1186,7 @@ function CashTransactionForm({
     : ["Receive Deposit", "Cash Payment", "Journal Entry - Debit Cash", "Journal Entry - Credit Cash"];
   const [cashAccountId, setCashAccountId] = useState("");
   const [date, setDate] = useState(localDate());
-  const [action, setAction] = useState(actionOptions[0]);
+  const [action, setAction] = useState(initialAction && actionOptions.includes(initialAction) ? initialAction : actionOptions[0]);
   const [offsetAccountId, setOffsetAccountId] = useState("");
   const [amount, setAmount] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
@@ -818,7 +1270,7 @@ function BankReconciliationForm({ accounts }: { accounts: CashBookAccount[] }) {
   );
 }
 
-function CustomerInvoiceForm({ customers }: { customers: Customer[] }) {
+function CustomerInvoiceForm({ customers, initialItem = "" }: { customers: Customer[]; initialItem?: string }) {
   const postInvoice = usePostCustomerInvoice();
   const [customerId, setCustomerId] = useState("");
   const [invoiceDate, setInvoiceDate] = useState(localDate());
@@ -827,7 +1279,7 @@ function CustomerInvoiceForm({ customers }: { customers: Customer[] }) {
   const [salesPerson, setSalesPerson] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
   const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState([{ item: "", quantity: "1", unitPrice: "", discount: "0", tax: "16" }]);
+  const [lines, setLines] = useState([{ item: initialItem, quantity: "1", unitPrice: "", discount: "0", tax: "16" }]);
 
   const updateLine = (index: number, patch: Partial<(typeof lines)[number]>) => {
     setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
@@ -854,7 +1306,7 @@ function CustomerInvoiceForm({ customers }: { customers: Customer[] }) {
       });
       toast.success(`Posted invoice ${result.invoiceNumber}`);
       setNotes("");
-      setLines([{ item: "", quantity: "1", unitPrice: "", discount: "0", tax: "16" }]);
+      setLines([{ item: initialItem, quantity: "1", unitPrice: "", discount: "0", tax: "16" }]);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not post invoice");
     }
@@ -938,12 +1390,12 @@ function CreditNoteForm({ customers, invoices }: { customers: Customer[]; invoic
   );
 }
 
-function CogsForm({ invoices, paymentAccounts }: { invoices: RevenueInvoice[]; paymentAccounts: ChartAccount[] }) {
+function CogsForm({ invoices, paymentAccounts, initialCategory = "" }: { invoices: RevenueInvoice[]; paymentAccounts: ChartAccount[]; initialCategory?: string }) {
   const postCogs = usePostCogsEntry();
   const [date, setDate] = useState(localDate());
   const [branch, setBranch] = useState("");
   const [invoiceId, setInvoiceId] = useState("");
-  const [productService, setProductService] = useState("");
+  const [productService, setProductService] = useState(initialCategory === "Freight/Inward Transport" ? initialCategory : "");
   const [project, setProject] = useState("");
   const [material, setMaterial] = useState("0");
   const [labour, setLabour] = useState("0");
@@ -1007,12 +1459,14 @@ function OperatingExpenseForm({
   categories,
   paymentAccounts,
   suppliers,
+  initialCategory,
 }: {
   group: "administrative" | "finance" | "other_operating";
   title: string;
   categories: string[];
   paymentAccounts: ChartAccount[];
   suppliers: Supplier[];
+  initialCategory?: string;
 }) {
   const postExpense = usePostOperatingExpense();
   const [date, setDate] = useState(localDate());
@@ -1020,7 +1474,7 @@ function OperatingExpenseForm({
   const [supplierId, setSupplierId] = useState("");
   const [branch, setBranch] = useState("");
   const [description, setDescription] = useState("");
-  const [category, setCategory] = useState(categories[0] ?? "");
+  const [category, setCategory] = useState(initialCategory && categories.includes(initialCategory) ? initialCategory : categories[0] ?? "");
   const [amount, setAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("cash");
   const [referenceNumber, setReferenceNumber] = useState("");
