@@ -24,6 +24,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -54,8 +55,10 @@ function getInitials(name?: string | null): string {
 export default function AppSidebar() {
   const location = useLocation();
   const { appUser, organization, signOut } = useAuth();
+  const { setOpen } = useSidebar();
   const isActive = (href: string) =>
     location.pathname === href || (href !== "/dashboard" && location.pathname.startsWith(`${href}/`));
+  const closeSidebar = () => setOpen(false);
 
   return (
     <Sidebar>
@@ -89,7 +92,7 @@ export default function AppSidebar() {
                     isActive={isActive(item.href)}
                     tooltip={item.label}
                   >
-                    <Link to={item.href}>
+                    <Link to={item.href} onClick={closeSidebar}>
                       <item.icon />
                       <span>{item.label}</span>
                     </Link>
@@ -113,7 +116,7 @@ export default function AppSidebar() {
                       isActive={location.pathname === "/settings"}
                       tooltip="Workshop settings"
                     >
-                      <Link to="/settings">
+                      <Link to="/settings" onClick={closeSidebar}>
                         <SettingsIcon />
                         <span>Settings</span>
                       </Link>

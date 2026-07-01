@@ -1140,12 +1140,25 @@ a svg {
   flex-shrink: 0;
 }
 
+.sidebar-mobile-overlay {
+  display: none;
+}
+
 @media (max-width: 767px) {
   aside.bg-sidebar {
     position: fixed;
     z-index: 50;
     width: min(18rem, 86vw);
     box-shadow: 24px 0 60px rgba(9, 25, 21, .28);
+  }
+
+  .sidebar-mobile-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: block;
+    background: rgba(8, 22, 18, .48);
+    backdrop-filter: blur(2px);
   }
 
   main.overflow-auto {

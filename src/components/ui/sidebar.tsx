@@ -9,7 +9,7 @@ type SidebarContextValue = {
 
 const SidebarContext = createContext<SidebarContextValue | null>(null);
 
-function useSidebar() {
+export function useSidebar() {
   const ctx = useContext(SidebarContext);
   if (!ctx) throw new Error("Sidebar components must be used within SidebarProvider");
   return ctx;
@@ -27,7 +27,17 @@ export function SidebarProvider({
 
   return (
     <SidebarContext.Provider value={{ open, setOpen, toggle }}>
-      <div className={cn("flex min-h-screen w-full min-w-0 overflow-x-hidden", className)}>{children}</div>
+      <div className={cn("flex min-h-screen w-full min-w-0 overflow-x-hidden", className)}>
+        {children}
+        {open && (
+          <button
+            type="button"
+            className="sidebar-mobile-overlay"
+            aria-label="Close sidebar"
+            onClick={() => setOpen(false)}
+          />
+        )}
+      </div>
     </SidebarContext.Provider>
   );
 }
@@ -46,7 +56,7 @@ export function SidebarTrigger({
   className,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  const { toggle } = useSidebar();
+  const { open, toggle } = useSidebar();
   return (
     <button
       type="button"
@@ -56,6 +66,7 @@ export function SidebarTrigger({
         className,
       )}
       aria-label="Toggle sidebar"
+      aria-expanded={open}
       {...props}
     >
       <span className="sr-only">Toggle sidebar</span>
@@ -76,6 +87,7 @@ export function Sidebar({
   const { open } = useSidebar();
   return (
     <aside
+      data-sidebar
       className={cn(
         "sticky top-0 flex h-screen w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground transition-transform md:translate-x-0",
         open ? "translate-x-0" : "-translate-x-full md:translate-x-0",
