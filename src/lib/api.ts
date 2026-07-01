@@ -20,7 +20,8 @@ import {
   type AccountingBankReconciliation, type AccountingBill, type AccountingCashAccount,
   type AccountingCashTransaction, type AccountingCogsEntry, type AccountingCreditNote,
   type AccountingExpense, type AccountingInvoice, type AccountingInvoiceLine,
-  type AccountingOperatingExpense, type AccountingPayment, type ChartAccount, type JournalEntry, type LedgerLine,
+  type AccountingJournalEntry, type AccountingJournalLine,
+  type AccountingOperatingExpense, type AccountingPayment, type ChartAccount,
   type LoanRepayment, type Supplier,
 } from "@/lib/supabase";
 import {
@@ -525,8 +526,8 @@ export type ParentAccountOption = {
   name: string;
 };
 
-type PostedEntry = JournalEntry & {
-  ledger_line?: LedgerLine[];
+type PostedEntry = AccountingJournalEntry & {
+  accounting_journal_lines?: AccountingJournalLine[];
 };
 
 const r2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
@@ -557,8 +558,8 @@ function toDbLines(lines: JournalLineInput[]) {
 
 async function postedEntries(input?: { from?: string; to?: string }): Promise<PostedEntry[]> {
   let q = supabase
-    .from("journal_entry")
-    .select("*, ledger_line(*)")
+    .from("accounting_journal_entries")
+    .select("*, accounting_journal_lines(*)")
     .eq("status", "POSTED")
     .order("date", { ascending: true });
 
@@ -568,14 +569,24 @@ async function postedEntries(input?: { from?: string; to?: string }): Promise<Po
   return q.then(unwrap<PostedEntry[]>);
 }
 
+function postedEntryLines(entry: PostedEntry) {
+  return entry.accounting_journal_lines ?? [];
+}
+
+function postedLineAccountId(line: AccountingJournalLine) {
+  return line.chart_account_id ?? line.account_id;
+}
+
 function aggregateLines(entries: PostedEntry[]) {
   const totals = new Map<string, { debit: number; credit: number }>();
   for (const entry of entries) {
-    for (const line of entry.ledger_line ?? []) {
-      const cur = totals.get(line.account_id) ?? { debit: 0, credit: 0 };
+    for (const line of postedEntryLines(entry)) {
+      const accountId = postedLineAccountId(line);
+      if (!accountId) continue;
+      const cur = totals.get(accountId) ?? { debit: 0, credit: 0 };
       cur.debit += num(line.debit);
       cur.credit += num(line.credit);
-      totals.set(line.account_id, cur);
+      totals.set(accountId, cur);
     }
   }
   return totals;
@@ -898,8 +909,10 @@ export const accountingApi = {
     const rows: CashBookTransactionRow[] = [];
 
     for (const entry of entries) {
-      for (const line of entry.ledger_line ?? []) {
-        const cashAccount = accountByChartId.get(line.account_id);
+      for (const line of postedEntryLines(entry)) {
+        const accountId = postedLineAccountId(line);
+        if (!accountId) continue;
+        const cashAccount = accountByChartId.get(accountId);
         if (!cashAccount) continue;
         const debit = num(line.debit);
         const credit = num(line.credit);
@@ -952,7 +965,7 @@ export const accountingApi = {
       .then(unwrap<CogsEntryRow[]>),
   listOperatingExpenses: (group?: AccountingOperatingExpense["expense_group"]) => {
     let q = supabase
-      .from("accounting_operating_expenses")
+      .from("accounting_expense_entries")
       .select("*, payment_account:chart_account(id, code, name)")
       .order("date", { ascending: false });
     if (group) q = q.eq("expense_group", group);
@@ -1313,8 +1326,9 @@ export const accountingApi = {
     for (const entry of allEntries) {
       const entryDate = new Date(entry.date);
       const beforeFrom = input.from ? entryDate < new Date(input.from) : false;
-      for (const line of entry.ledger_line ?? []) {
-        if (line.account_id !== input.accountId) continue;
+      for (const line of postedEntryLines(entry)) {
+        const accountId = postedLineAccountId(line);
+        if (accountId !== input.accountId) continue;
         const debit = num(line.debit);
         const credit = num(line.credit);
         const movement = account.normal_balance === "DEBIT" ? debit - credit : credit - debit;

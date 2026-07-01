@@ -127,6 +127,7 @@ export interface ChartAccount {
   description: string | null;
   created_by: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface JournalEntry {
@@ -145,6 +146,7 @@ export interface JournalEntry {
   posted_by: string | null;
   created_by: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface LedgerLine {
@@ -152,6 +154,41 @@ export interface LedgerLine {
   org_id: string;
   journal_entry_id: string;
   account_id: string;
+  debit: number;
+  credit: number;
+  description: string | null;
+  created_at: string;
+}
+
+export interface AccountingJournalEntry {
+  id: string;
+  org_id: string;
+  journal_number: string;
+  entry_number: string;
+  date: string;
+  description: string | null;
+  memo: string | null;
+  reference_number: string | null;
+  branch: string | null;
+  status: string;
+  source: string;
+  source_type: string | null;
+  source_id: string | null;
+  total_debit: number;
+  total_credit: number;
+  posted_at: string | null;
+  posted_by: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AccountingJournalLine {
+  id: string;
+  org_id: string;
+  journal_entry_id: string;
+  chart_account_id: string;
+  account_id: string | null;
   debit: number;
   credit: number;
   description: string | null;
@@ -191,6 +228,7 @@ export interface AccountingInvoice {
   journal_entry_id: string | null;
   created_by: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface AccountingInvoiceLine {
@@ -222,6 +260,7 @@ export interface AccountingCreditNote {
   journal_entry_id: string | null;
   created_by: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface AccountingBill {
@@ -297,6 +336,7 @@ export interface AccountingCashAccount {
   status: "active" | "inactive";
   created_by: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface AccountingCashTransaction {
@@ -330,6 +370,7 @@ export interface AccountingBankReconciliation {
   notes: string | null;
   created_by: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface AccountingCogsEntry {
@@ -352,6 +393,7 @@ export interface AccountingCogsEntry {
   journal_entry_id: string | null;
   created_by: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface AccountingOperatingExpense {
@@ -372,6 +414,7 @@ export interface AccountingOperatingExpense {
   journal_entry_id: string | null;
   created_by: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 export interface LoanRepayment {
