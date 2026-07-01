@@ -150,7 +150,7 @@ export default function Index() {
             </motion.div>
 
             <motion.h1
-              className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight text-white leading-[1.1]"
+              className="landing-hero-title text-white"
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
@@ -158,7 +158,8 @@ export default function Index() {
               Every job.{" "}
               <span className="text-amber-400">Tracked.</span>
               <br />
-              Every brake shoe.{" "}
+              Every brake shoe.
+              <br />
               <span className="text-emerald-400">Accounted for.</span>
             </motion.h1>
 

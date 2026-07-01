@@ -227,9 +227,6 @@ export default function Dashboard() {
             </DataTable>
           )}
 
-          {createModal === "job" && <AddJobModal customers={customers.data ?? []} onClose={() => setCreateModal(null)} />}
-          {createModal === "stock" && <AddStockModal onClose={() => setCreateModal(null)} />}
-          {createModal === "customer" && <AddCustomerModal onClose={() => setCreateModal(null)} />}
           {selectedStockId && createModal !== "stock" && (
             <button type="button" className="add-button" onClick={() => setSelectedStockId(null)} style={{marginTop: "16px"}}>
               Back to stock list
