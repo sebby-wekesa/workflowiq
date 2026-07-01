@@ -22,12 +22,12 @@ export function SidebarProvider({
   children?: React.ReactNode;
   className?: string;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const toggle = () => setOpen((v) => !v);
 
   return (
     <SidebarContext.Provider value={{ open, setOpen, toggle }}>
-      <div className={cn("flex min-h-screen w-full", className)}>{children}</div>
+      <div className={cn("flex min-h-screen w-full min-w-0 overflow-x-hidden", className)}>{children}</div>
     </SidebarContext.Provider>
   );
 }
@@ -39,7 +39,7 @@ export function SidebarInset({
   children?: React.ReactNode;
   className?: string;
 }) {
-  return <div className={cn("flex min-h-screen flex-1 flex-col", className)}>{children}</div>;
+  return <div className={cn("flex min-h-screen min-w-0 flex-1 flex-col", className)}>{children}</div>;
 }
 
 export function SidebarTrigger({

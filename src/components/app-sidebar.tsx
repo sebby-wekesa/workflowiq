@@ -37,7 +37,6 @@ const NAV_ITEMS = [
   { label: "Customers", href: "/customers", icon: UsersIcon },
   { label: "Stock", href: "/stock", icon: PackageIcon },
   { label: "Staff", href: "/staff", icon: UserCogIcon },
-  { label: "Accountant", href: "/accountant", icon: BarChart3Icon },
   { label: "Reports", href: "/reports", icon: BarChart3Icon },
   { label: "Accounting", href: "/accounting", icon: LandmarkIcon },
 ];
